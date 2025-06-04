@@ -29,6 +29,23 @@ def save_json(uid: int, sub: str, prefix: str, data: Dict[str, Any]) -> Path:
     return fp
 
 
+# ─────────────── запись в указанный JSON-файл ───────────────
+def save_json_named(uid: int, sub: str, name: str, data: Dict[str, Any]) -> Path:
+    """Write JSON data to a file with an explicit name."""
+    folder = user_dir(uid) / sub
+    folder.mkdir(exist_ok=True)
+
+    if not name.endswith(".json"):
+        name += ".json"
+
+    pwd = get_pass(uid)
+    payload = {"enc": encrypt(data, pwd)} if pwd else data
+
+    fp = folder / name
+    fp.write_text(json.dumps(payload, ensure_ascii=False) + "\n", encoding="utf-8")
+    return fp
+
+
 # ─────────── чтение всех строк с защитой от «кривых» ───────
 def load_records(uid: int, sub: str) -> List[Dict[str, Any]]:
     """
