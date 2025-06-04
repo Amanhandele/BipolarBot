@@ -11,7 +11,7 @@ from aiogram import Router, Bot, types
 from aiogram.filters import Command
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
-from config import PARAMETERS
+from config import user_parameters
 from Token import AUTHORIZED_USER_IDS
 from utils.storage import user_dir, save_json
 
@@ -30,8 +30,9 @@ def build_kb(param: str) -> types.InlineKeyboardMarkup:
 
 
 async def start(bot: Bot, uid: int, backdate: Optional[str] = None) -> None:
-    _state[uid] = {"index": 0, "data": {"date": backdate}, "file": None}
-    k, label = PARAMETERS[0]
+    params=user_parameters(uid)
+    _state[uid] = {"index": 0, "data": {"date": backdate}, "file": None, "params":params}
+    k, label = params[0]
     await bot.send_message(uid, f"{label}  (-3…3):", reply_markup=build_kb(k))
 
 
@@ -50,11 +51,12 @@ async def cb_scale(cq: types.CallbackQuery):
     payload, val = cq.data.rsplit("_", 1)          # m_<param>_<val>
     _, param = payload.split("_", 1)
 
-    st = _state.setdefault(cq.from_user.id, {"index": 0, "data": {}, "file": None})
+    st = _state.setdefault(cq.from_user.id, {"index": 0, "data": {}, "file": None, "params": user_parameters(cq.from_user.id)})
     st["data"][param] = None if val == "x" else int(val)
     st["index"] += 1
 
-    if st["index"] >= len(PARAMETERS):
+    params = st.get("params") or user_parameters(cq.from_user.id)
+    if st["index"] >= len(params):
         # Все ответы получены — спрашиваем summary, сохранять пока рано
         await cq.message.answer(
             "📝 Что было самым живым сегодня? (можно ничего не писать)"
@@ -64,7 +66,7 @@ async def cb_scale(cq: types.CallbackQuery):
         await cq.answer()
         return
 
-    nxt_key, nxt_label = PARAMETERS[st["index"]]
+    nxt_key, nxt_label = params[st["index"]]
     await cq.message.answer(f"{nxt_label}  (-3…3):", reply_markup=build_kb(nxt_key))
     await cq.answer()
 
@@ -102,7 +104,10 @@ async def _summary_timeout(uid: int, delay: int = 600):
 @router.message(lambda m: m.from_user.id in AUTHORIZED_USER_IDS)
 async def summary_or_plain(msg: types.Message):
     st = _state.get(msg.from_user.id)
-    if st is None or st["index"] < len(PARAMETERS):
+    params = None
+    if st is not None:
+        params = st.get("params")
+    if st is None or st["index"] < len(params or user_parameters(msg.from_user.id)):
         return     # нет открытой сессии или чек-ин ещё не закончен
 
     st["data"]["summary"] = msg.text or "(пусто)"

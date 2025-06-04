@@ -8,6 +8,7 @@ DEFAULT_EVENING=time(21,0)
 PARAMETERS=[
     ("mood","Настроение"),
     ("energy","Энергия"),
+    ("libido","Либидо"),
     ("thought_speed","Скорость мыслей"),
     ("impulsivity","Импульсивность"),
     ("irritability","Раздражительность"),
@@ -51,15 +52,49 @@ EMOTION_COEFF={
     'сила':1.0,
     'вдохновение':1.0,
 }
-def _set_path(uid:int): return BASE_DIR/str(uid)/"settings.json"
-def load_user_times(uid:int):
+def _set_path(uid:int) -> Path:
+    return BASE_DIR/str(uid)/"settings.json"
+
+def _load_settings(uid:int) -> dict:
     p=_set_path(uid)
     if p.exists():
-        d=json.loads(p.read_text())
-        mt=list(map(int,d.get("morning","08:00").split(":")))
-        et=list(map(int,d.get("evening","21:00").split(":")))
-        return time(*mt), time(*et)
-    return DEFAULT_MORNING, DEFAULT_EVENING
+        try:
+            return json.loads(p.read_text())
+        except Exception:
+            return {}
+    return {}
+
+def _save_settings(uid:int, data:dict):
+    p=_set_path(uid)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(json.dumps(data, ensure_ascii=False))
+def load_user_times(uid:int):
+    d=_load_settings(uid)
+    mt=list(map(int,d.get("morning","08:00").split(":")))
+    et=list(map(int,d.get("evening","21:00").split(":")))
+    return time(*mt), time(*et)
 def save_user_times(uid:int, m:str, e:str):
-    p=_set_path(uid); p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text(json.dumps({"morning":m,"evening":e}))
+    data=_load_settings(uid)
+    data["morning"]=m
+    data["evening"]=e
+    _save_settings(uid,data)
+
+# ─── работа с пользовательскими параметрами ───────────────
+def load_custom_params(uid:int):
+    d=_load_settings(uid)
+    return d.get("custom_params", [])
+
+def add_custom_param(uid:int,label:str)->str:
+    d=_load_settings(uid)
+    lst=d.setdefault("custom_params", [])
+    key=f"custom{len(lst)+1}"
+    lst.append({"key":key,"label":label})
+    _save_settings(uid,d)
+    return key
+
+def user_parameters(uid:int):
+    extras=[(p["key"],p["label"]) for p in load_custom_params(uid)]
+    return PARAMETERS+extras
+
+def user_graph_params(uid:int):
+    return user_parameters(uid)+[("cim_score","CIM-score")]

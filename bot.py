@@ -30,7 +30,7 @@ async def setup_commands():
         BotCommand(command="menu", description="Меню"),
         BotCommand(command="checkin", description="Быстрый чек-ин"),
         BotCommand(command="dream", description="Записать сон"),
-        BotCommand(command="dreams", description="Список снов"),
+        BotCommand(command="dreams", description="Архив снов"),
         BotCommand(command="set", description="Время уведомлений"),
         BotCommand(command="login", description="Ввести пароль"),
         BotCommand(command="register", description="Новый пароль"),
