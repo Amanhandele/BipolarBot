@@ -69,16 +69,32 @@ async def _safe_delete(msg: types.Message):
 # ───────────────────────────────────────────────────────────
 @router.message(Command("setpass"))
 async def cmd_set(msg: types.Message):
-    if msg.from_user.id in AUTHORIZED_USER_IDS:
-        _cache[msg.from_user.id] = msg.text.split(maxsplit=1)[1]
+    if msg.from_user.id not in AUTHORIZED_USER_IDS:
+        return
+    parts = msg.text.split(maxsplit=1)
+    if len(parts) > 1:
+        _cache[msg.from_user.id] = parts[1]
         await msg.reply("🔑 Пароль установлен.")
+    else:
+        start_set(msg.bot, msg.from_user.id)
 
 
 @router.message(Command("login"))
 async def cmd_log(msg: types.Message):
-    if msg.from_user.id in AUTHORIZED_USER_IDS:
-        _cache[msg.from_user.id] = msg.text.split(maxsplit=1)[1]
+    if msg.from_user.id not in AUTHORIZED_USER_IDS:
+        return
+    parts = msg.text.split(maxsplit=1)
+    if len(parts) > 1:
+        _cache[msg.from_user.id] = parts[1]
         await msg.reply("✅ Пароль принят.")
+    else:
+        start_login(msg.bot, msg.from_user.id)
+
+
+@router.message(Command("register"))
+async def cmd_register(msg: types.Message):
+    if msg.from_user.id in AUTHORIZED_USER_IDS:
+        start_set(msg.bot, msg.from_user.id)
 
 
 # ───────────────────────────────────────────────────────────

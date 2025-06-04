@@ -7,13 +7,24 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 from handlers import view_dreams
 from utils.env import AUTHORIZED_USER_IDS
 from config import PARAMETERS, load_user_times, save_user_times
-from analysis.generate_plot import plot
+from analysis.generate_plot import plot_multi
 from analysis.fourier import save_fft
 from analysis.export import export
 from handlers import mood
 from handlers import view_dreams   # 📚 кнопка сны
 from handlers import missed
 from handlers import auth
+from dataclasses import dataclass, field
+from typing import Optional
+
+@dataclass
+class GraphState:
+    period: str = "all"
+    page: int = 0
+    params: list[str] = field(default_factory=list)
+    msg_id: Optional[int] = None
+
+_graph_state: dict[int, GraphState] = {}
 
 router = Router()
 
@@ -105,37 +116,143 @@ async def dreams_button(cq: types.CallbackQuery, bot: Bot):
 
 # ───── кнопка График ───────────────────────────────────────
 @router.callback_query(lambda c: c.data == "mg_graph")
-async def choose_param(cq: types.CallbackQuery):
+async def g_period(cq: types.CallbackQuery):
     kb = InlineKeyboardBuilder()
-    for k, l in PARAMETERS:
-        kb.button(text=l, callback_data=f"g_{k}")
+    for p, t in [
+        ("all", "Весь доступный диапазон"),
+        ("year", "Год"),
+        ("month", "Месяц"),
+        ("week", "Неделя"),
+    ]:
+        kb.button(text=t, callback_data=f"gp_set_{p}")
     kb.button(text="⬅️", callback_data="mg_back")
-    kb.adjust(2)
-    await cq.message.edit_text("Параметр:", reply_markup=kb.as_markup())
-    await cq.answer()
-
-
-@router.callback_query(lambda c: re.match(r"g_\\w+", c.data))
-async def choose_period(cq: types.CallbackQuery):
-    param = cq.data[2:]
-    kb = InlineKeyboardBuilder()
-    for p, t in [("days", "Дни"), ("weeks", "Недели"), ("months", "Месяцы")]:
-        kb.button(text=t, callback_data=f"gp_{param}_{p}")
-    kb.button(text="⬅️", callback_data="mg_graph")
     kb.adjust(1)
     await cq.message.edit_text("Период:", reply_markup=kb.as_markup())
     await cq.answer()
 
 
-@router.callback_query(lambda c: re.match(r"gp_\\w+_\\w+", c.data))
-async def send_graph(cq: types.CallbackQuery, bot: Bot):
-    _, param, period = cq.data.split("_", 2)
-    path = f"/tmp/{param}_{period}.png"
-    res = plot(cq.from_user.id, param, period, path)
+@router.callback_query(lambda c: c.data.startswith("gp_set_"))
+async def g_choose_param(cq: types.CallbackQuery):
+    period = cq.data.split("_", 2)[2]
+    st = _graph_state.setdefault(cq.from_user.id, GraphState())
+    st.period = period
+    st.page = 0
+    st.params = []
+    st.msg_id = None
+    kb = InlineKeyboardBuilder()
+    for k, l in PARAMETERS:
+        kb.button(text=l, callback_data=f"gp_add_{k}")
+    kb.button(text="⬅️", callback_data="mg_graph")
+    kb.adjust(2)
+    await cq.message.edit_text("Параметр:", reply_markup=kb.as_markup())
+    await cq.answer()
+
+
+async def _show_graph(bot: Bot, uid: int, st: GraphState, message: types.Message):
+    path = f"/tmp/{uid}_graph.png"
+    res = plot_multi(uid, st.params, st.period, path, st.page)
+    kb = InlineKeyboardBuilder()
+    if st.period != "all":
+        kb.button(text="⬅️", callback_data="gprev")
+        kb.button(text="➡️", callback_data="gnext")
+    kb.adjust(2)
+    kb.button(text="Выбрать другой параметр", callback_data="g_new")
+    if len(st.params) < len(PARAMETERS):
+        kb.button(text="Выбрать дополнительный параметр", callback_data="g_more")
+    kb.adjust(1)
+    if st.msg_id:
+        try:
+            await bot.delete_message(uid, st.msg_id)
+        except Exception:
+            pass
     if res:
-        await bot.send_photo(cq.from_user.id, photo=open(res, "rb"))
+        msg = await bot.send_photo(uid, open(res, "rb"), reply_markup=kb.as_markup())
     else:
-        await bot.send_message(cq.from_user.id, "Нет данных.")
+        msg = await bot.send_message(uid, "Нет данных.", reply_markup=kb.as_markup())
+    st.msg_id = msg.message_id
+
+
+@router.callback_query(lambda c: c.data.startswith("gp_add_"))
+async def g_first_param(cq: types.CallbackQuery, bot: Bot):
+    param = cq.data.split("_", 2)[2]
+    st = _graph_state.setdefault(cq.from_user.id, GraphState())
+    st.params = [param]
+    await _show_graph(bot, cq.from_user.id, st, cq.message)
+    await cq.answer()
+
+
+@router.callback_query(lambda c: c.data == "g_new")
+async def g_new_param(cq: types.CallbackQuery):
+    st = _graph_state.get(cq.from_user.id)
+    if st and st.msg_id:
+        try:
+            await cq.bot.delete_message(cq.from_user.id, st.msg_id)
+        except Exception:
+            pass
+        st.msg_id = None
+    kb = InlineKeyboardBuilder()
+    for k, l in PARAMETERS:
+        kb.button(text=l, callback_data=f"gp_add_{k}")
+    kb.button(text="⬅️", callback_data="mg_graph")
+    kb.adjust(2)
+    await cq.message.edit_text("Параметр:", reply_markup=kb.as_markup())
+    if st:
+        st.params = []
+    await cq.answer()
+
+
+@router.callback_query(lambda c: c.data == "g_more")
+async def g_more_param(cq: types.CallbackQuery):
+    st = _graph_state.get(cq.from_user.id)
+    if not st:
+        await cq.answer(); return
+    kb = InlineKeyboardBuilder()
+    remaining = [k for k, _ in PARAMETERS if k not in st.params]
+    for k, l in PARAMETERS:
+        if k in remaining:
+            kb.button(text=l, callback_data=f"ga_{k}")
+    if remaining:
+        kb.button(text="Добавить все", callback_data="ga_all")
+    kb.button(text="⬅️", callback_data="g_cancel")
+    kb.adjust(2)
+    await cq.message.edit_text("Дополнительный параметр:", reply_markup=kb.as_markup())
+    await cq.answer()
+
+
+@router.callback_query(lambda c: c.data == "g_cancel")
+async def g_cancel_more(cq: types.CallbackQuery, bot: Bot):
+    st = _graph_state.get(cq.from_user.id)
+    if not st:
+        await cq.answer(); return
+    await _show_graph(bot, cq.from_user.id, st, cq.message)
+    await cq.answer()
+
+
+@router.callback_query(lambda c: c.data.startswith("ga_") or c.data == "ga_all")
+async def g_add_param(cq: types.CallbackQuery, bot: Bot):
+    st = _graph_state.get(cq.from_user.id)
+    if not st:
+        await cq.answer(); return
+    if cq.data == "ga_all":
+        st.params = [k for k, _ in PARAMETERS]
+    else:
+        param = cq.data.split("_", 1)[1]
+        if param not in st.params:
+            st.params.append(param)
+    await _show_graph(bot, cq.from_user.id, st, cq.message)
+    await cq.answer()
+
+
+@router.callback_query(lambda c: c.data in ("gprev", "gnext"))
+async def g_nav(cq: types.CallbackQuery, bot: Bot):
+    st = _graph_state.get(cq.from_user.id)
+    if not st:
+        await cq.answer(); return
+    if cq.data == "gprev":
+        st.page += 1
+    else:
+        st.page = max(0, st.page - 1)
+    await _show_graph(bot, cq.from_user.id, st, cq.message)
     await cq.answer()
 
 
