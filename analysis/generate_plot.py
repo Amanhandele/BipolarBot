@@ -17,7 +17,7 @@ def _load(uid: int) -> pd.DataFrame:
     if folder.exists():
         pwd = get_pass(uid)
         for fp in sorted(folder.glob("mood_*.jsonl")):
-            date = datetime.datetime.strptime(fp.name.split("_")[1], "%Y%m%d").date()
+            file_date = fp.name.split("_")[1]
             with fp.open("rb") as f:
                 for raw in f:
                     try:
@@ -32,7 +32,15 @@ def _load(uid: int) -> pd.DataFrame:
                         if not pwd:
                             continue
                         d = decrypt(d["enc"], pwd) or {}
-                    d.setdefault("date", date)
+                    date_str = d.get("date")
+                    if date_str:
+                        try:
+                            rec_date = datetime.date.fromisoformat(str(date_str))
+                        except ValueError:
+                            rec_date = datetime.datetime.strptime(str(date_str)[:8], "%Y%m%d").date()
+                    else:
+                        rec_date = datetime.datetime.strptime(file_date[:8], "%Y%m%d").date()
+                    d["date"] = rec_date
                     rows.append(d)
     df = pd.DataFrame(rows)
 
