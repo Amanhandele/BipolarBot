@@ -5,6 +5,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from typing import Optional
 
+
 from utils.storage import user_dir
 
 
@@ -45,6 +46,7 @@ def _slice(df: pd.DataFrame, period: str, page: int) -> pd.DataFrame:
 
 
 def plot_multi(uid: int, params: list[str], period: str, out: str, page: int = 0) -> Optional[str]:
+
     df = _load(uid)
     if df.empty:
         return None

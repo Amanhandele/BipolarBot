@@ -15,14 +15,18 @@ from handlers import view_dreams   # 📚 кнопка сны
 from handlers import missed
 from handlers import auth
 from dataclasses import dataclass, field
+
 from typing import Optional
+
 
 @dataclass
 class GraphState:
     period: str = "all"
     page: int = 0
     params: list[str] = field(default_factory=list)
+
     msg_id: Optional[int] = None
+
 
 _graph_state: dict[int, GraphState] = {}
 
