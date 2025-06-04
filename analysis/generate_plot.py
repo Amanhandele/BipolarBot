@@ -69,6 +69,16 @@ def _slice(df: pd.DataFrame, period: str, page: int) -> pd.DataFrame:
     return df[(df["date"] >= start) & (df["date"] < end)]
 
 
+def emotion_counts(uid: int) -> dict[str, int]:
+    """Return a mapping emotion -> total occurrences in dreams."""
+    counts: dict[str, int] = {}
+    for rec in load_records(uid, "dreams"):
+        metrics = rec.get("metrics") or {}
+        for emo in metrics.get("emotions", []):
+            counts[emo] = counts.get(emo, 0) + 1
+    return counts
+
+
 def plot_multi(uid: int, params: list[str], period: str, out: str, page: int = 0) -> Optional[str]:
 
     df = _load(uid)
@@ -84,41 +94,27 @@ def plot_multi(uid: int, params: list[str], period: str, out: str, page: int = 0
     df = df.sort_values("date")
     df.set_index("date", inplace=True)
 
-    daily_mean = df[params].resample("1D").mean().dropna(how="all")
+    daily_mean = df[params].resample("1D").mean().fillna(0)
     if daily_mean.empty:
         return None
 
     if len(params) > 1:
         mean = daily_mean.rolling(window=7, min_periods=1).mean()
-        step = 1
-        std = None
     else:
         step = 1
         if len(daily_mean) > 60:
             span = (daily_mean.index[-1] - daily_mean.index[0]).days + 1
             step = max(1, ceil(span / 60))
         mean = daily_mean.resample(f"{step}D").mean()
-        std = daily_mean.resample(f"{step}D").std().fillna(0)
 
     plt.figure()
     for p in params:
         if p in mean.columns:
-            series = mean[p].dropna()
-            if series.empty:
-                continue
+            series = mean[p]
             if len(params) > 1:
                 plt.plot(series.index, series, label=p)
             else:
-                if step > 1:
-                    plt.errorbar(
-                        series.index,
-                        series,
-                        yerr=std[p].loc[series.index],
-                        fmt="-o",
-                        label=p,
-                    )
-                else:
-                    plt.plot(series.index, series, "-o", label=p)
+                plt.plot(series.index, series, label=p)
 
     # ───── оформление оси X ────────────────────────────────
     months_nom = [

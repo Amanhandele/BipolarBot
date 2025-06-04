@@ -8,7 +8,7 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 from handlers import view_dreams
 from utils.env import AUTHORIZED_USER_IDS
 from config import CIM_EMOTIONS, load_user_times, save_user_times, user_graph_params, add_custom_param
-from analysis.generate_plot import plot_multi
+from analysis.generate_plot import plot_multi, emotion_counts
 from analysis.fourier import save_fft
 from utils.storage import user_dir
 from analysis.export import export
@@ -328,12 +328,17 @@ async def cim_choose_param(cq: types.CallbackQuery):
     st.page = 0
     st.params = []
     st.msg_id = None
+    counts = emotion_counts(cq.from_user.id)
+    available = [e for e in CIM_EMOTIONS if counts.get(e)]
     kb = InlineKeyboardBuilder()
-    for e in CIM_EMOTIONS:
-        kb.button(text=e, callback_data=f"cp_add_{e}")
+    for e in available:
+        kb.button(text=f"{e} ({counts[e]})", callback_data=f"cp_add_{e}")
     kb.button(text="⬅️", callback_data="mg_cim")
     kb.adjust(2)
-    await _edit(cq.message, "Эмоция:", kb.as_markup())
+    if available:
+        await _edit(cq.message, "Эмоция:", kb.as_markup())
+    else:
+        await _edit(cq.message, "Нет данных по эмоциям", kb.as_markup())
     await cq.answer()
 
 
@@ -341,13 +346,15 @@ async def _show_cim(bot: Bot, uid: int, st: GraphState, message: types.Message):
     path = user_dir(uid) / "cim_plot.png"
     params = [f"emo_{p}" for p in st.params]
     res = plot_multi(uid, params, st.period, str(path), st.page)
+    counts = emotion_counts(uid)
+    available = [e for e in CIM_EMOTIONS if counts.get(e)]
     kb = InlineKeyboardBuilder()
     if st.period != "all":
         kb.button(text="⬅️", callback_data="cprev")
         kb.button(text="➡️", callback_data="cnext")
     kb.adjust(2)
     kb.button(text="Выбрать другую эмоцию", callback_data="c_new")
-    if len(st.params) < len(CIM_EMOTIONS):
+    if len(st.params) < len(available):
         kb.button(text="Добавить эмоцию", callback_data="c_more")
     kb.adjust(1)
     kb.button(text="⬅️ Меню", callback_data="mg_back")
@@ -382,12 +389,17 @@ async def cim_new_param(cq: types.CallbackQuery):
         except Exception:
             pass
         st.msg_id = None
+    counts = emotion_counts(cq.from_user.id)
+    available = [e for e in CIM_EMOTIONS if counts.get(e)]
     kb = InlineKeyboardBuilder()
-    for e in CIM_EMOTIONS:
-        kb.button(text=e, callback_data=f"cp_add_{e}")
+    for e in available:
+        kb.button(text=f"{e} ({counts[e]})", callback_data=f"cp_add_{e}")
     kb.button(text="⬅️", callback_data="mg_cim")
     kb.adjust(2)
-    await _edit(cq.message, "Эмоция:", kb.as_markup())
+    if available:
+        await _edit(cq.message, "Эмоция:", kb.as_markup())
+    else:
+        await _edit(cq.message, "Нет данных по эмоциям", kb.as_markup())
     if st:
         st.params = []
     await cq.answer()
@@ -398,15 +410,20 @@ async def cim_more_param(cq: types.CallbackQuery):
     st = _cim_state.get(cq.from_user.id)
     if not st:
         await cq.answer(); return
+    counts = emotion_counts(cq.from_user.id)
+    available = [e for e in CIM_EMOTIONS if counts.get(e)]
+    remaining = [e for e in available if e not in st.params]
     kb = InlineKeyboardBuilder()
-    remaining = [e for e in CIM_EMOTIONS if e not in st.params]
     for e in remaining:
-        kb.button(text=e, callback_data=f"ca_{e}")
+        kb.button(text=f"{e} ({counts[e]})", callback_data=f"ca_{e}")
     if remaining:
         kb.button(text="Добавить все", callback_data="ca_all")
     kb.button(text="⬅️", callback_data="c_cancel")
     kb.adjust(2)
-    await _edit(cq.message, "Дополнительная эмоция:", kb.as_markup())
+    if remaining:
+        await _edit(cq.message, "Дополнительная эмоция:", kb.as_markup())
+    else:
+        await _edit(cq.message, "Нет новых эмоций", kb.as_markup())
     await cq.answer()
 
 
@@ -424,8 +441,10 @@ async def cim_add_param(cq: types.CallbackQuery, bot: Bot):
     st = _cim_state.get(cq.from_user.id)
     if not st:
         await cq.answer(); return
+    counts = emotion_counts(cq.from_user.id)
+    available = [e for e in CIM_EMOTIONS if counts.get(e)]
     if cq.data == "ca_all":
-        st.params = list(CIM_EMOTIONS)
+        st.params = list(available)
     else:
         param = cq.data.split("_", 1)[1]
         if param not in st.params:
