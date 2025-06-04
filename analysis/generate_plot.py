@@ -1,47 +1,28 @@
-import json
 import datetime
 from dateutil.relativedelta import relativedelta
 import pandas as pd
 import matplotlib.pyplot as plt
 from typing import Optional
 
-from utils.storage import user_dir, load_records
-from utils.crypto import decrypt
-from handlers.auth import get_pass
+from utils.storage import load_records
 
 
 def _load(uid: int) -> pd.DataFrame:
     """Return DataFrame with mood records and dream metrics."""
-    folder = user_dir(uid) / "mood"
     rows: list[dict] = []
-    if folder.exists():
-        pwd = get_pass(uid)
-        for fp in sorted(folder.glob("mood_*.jsonl")):
-            file_date = fp.name.split("_")[1]
-            with fp.open("rb") as f:
-                for raw in f:
-                    try:
-                        line = raw.decode("utf-8")
-                    except UnicodeDecodeError:
-                        continue
-                    try:
-                        d = json.loads(line)
-                    except json.JSONDecodeError:
-                        continue
-                    if "enc" in d:
-                        if not pwd:
-                            continue
-                        d = decrypt(d["enc"], pwd) or {}
-                    date_str = d.get("date")
-                    if date_str:
-                        try:
-                            rec_date = datetime.date.fromisoformat(str(date_str))
-                        except ValueError:
-                            rec_date = datetime.datetime.strptime(str(date_str)[:8], "%Y%m%d").date()
-                    else:
-                        rec_date = datetime.datetime.strptime(file_date[:8], "%Y%m%d").date()
-                    d["date"] = rec_date
-                    rows.append(d)
+    for rec in load_records(uid, "mood"):
+        date_str = rec.get("date")
+        if not date_str:
+            continue
+        try:
+            rec_date = datetime.date.fromisoformat(str(date_str))
+        except ValueError:
+            try:
+                rec_date = datetime.datetime.strptime(str(date_str)[:8], "%Y%m%d").date()
+            except ValueError:
+                continue
+        rec["date"] = rec_date
+        rows.append(rec)
     df = pd.DataFrame(rows)
 
     # добавляем показатели снов
