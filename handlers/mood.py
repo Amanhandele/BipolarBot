@@ -13,7 +13,7 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from config import PARAMETERS
 from Token import AUTHORIZED_USER_IDS
-from utils.storage import user_dir, save_jsonl
+from utils.storage import user_dir, save_json
 
 router = Router()
 _state: Dict[int, Dict] = {}          # user_id → {"index": int, "data": dict, "file": Path}
@@ -78,7 +78,7 @@ async def _save_final(uid: int):
 
     # Если файла ещё нет — создаём, иначе перезаписываем
     if st["file"] is None:
-        fp = save_jsonl(uid, "mood", "mood", st["data"])
+        fp = save_json(uid, "mood", "mood", st["data"])
         st["file"] = fp
     else:
         Path(st["file"]).write_text(

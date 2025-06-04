@@ -15,8 +15,8 @@ def user_dir(uid: int) -> Path:
     return p
 
 
-# ─────────────── запись одной строки JSONL ────────────────
-def save_jsonl(uid: int, sub: str, prefix: str, data: Dict[str, Any]) -> Path:
+# ─────────────── запись отдельного JSON-файла ──────────────
+def save_json(uid: int, sub: str, prefix: str, data: Dict[str, Any]) -> Path:
     ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     folder = user_dir(uid) / sub
     folder.mkdir(exist_ok=True)
@@ -24,9 +24,8 @@ def save_jsonl(uid: int, sub: str, prefix: str, data: Dict[str, Any]) -> Path:
     pwd = get_pass(uid)
     payload = {"enc": encrypt(data, pwd)} if pwd else data
 
-    fp = folder / f"{prefix}_{ts}.jsonl"
-    with fp.open("a", encoding="utf-8") as f:
-        f.write(json.dumps(payload, ensure_ascii=False) + "\n")
+    fp = folder / f"{prefix}_{ts}.json"
+    fp.write_text(json.dumps(payload, ensure_ascii=False) + "\n", encoding="utf-8")
     return fp
 
 
