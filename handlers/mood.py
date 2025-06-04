@@ -13,6 +13,7 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from config import user_parameters
 from Token import AUTHORIZED_USER_IDS
+from handlers import manage
 from utils.storage import user_dir, save_json
 
 router = Router()
@@ -101,7 +102,7 @@ async def _summary_timeout(uid: int, delay: int = 600):
 
 
 # ─────────────────────────────────────────────────────────
-@router.message(lambda m: m.from_user.id in AUTHORIZED_USER_IDS)
+@router.message(lambda m: m.from_user.id in AUTHORIZED_USER_IDS and m.from_user.id not in manage._wait_param)
 async def summary_or_plain(msg: types.Message):
     st = _state.get(msg.from_user.id)
     params = None
