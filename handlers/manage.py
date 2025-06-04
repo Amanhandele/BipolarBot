@@ -148,7 +148,7 @@ async def g_period(cq: types.CallbackQuery):
         kb.button(text=t, callback_data=f"gp_set_{p}")
     kb.button(text="⬅️", callback_data="mg_back")
     kb.adjust(1)
-    await cq.message.edit_text("Период:", reply_markup=kb.as_markup())
+    await _edit(cq.message, "Период:", kb.as_markup())
     await cq.answer()
 
 
@@ -291,7 +291,7 @@ async def cim_period(cq: types.CallbackQuery):
         kb.button(text=t, callback_data=f"cp_set_{p}")
     kb.button(text="⬅️", callback_data="mg_back")
     kb.adjust(1)
-    await cq.message.edit_text("Период:", reply_markup=kb.as_markup())
+    await _edit(cq.message, "Период:", kb.as_markup())
     await cq.answer()
 
 
@@ -308,7 +308,7 @@ async def cim_choose_param(cq: types.CallbackQuery):
         kb.button(text=e, callback_data=f"cp_add_{e}")
     kb.button(text="⬅️", callback_data="mg_cim")
     kb.adjust(2)
-    await cq.message.edit_text("Эмоция:", reply_markup=kb.as_markup())
+    await _edit(cq.message, "Эмоция:", kb.as_markup())
     await cq.answer()
 
 
@@ -362,7 +362,7 @@ async def cim_new_param(cq: types.CallbackQuery):
         kb.button(text=e, callback_data=f"cp_add_{e}")
     kb.button(text="⬅️", callback_data="mg_cim")
     kb.adjust(2)
-    await cq.message.edit_text("Эмоция:", reply_markup=kb.as_markup())
+    await _edit(cq.message, "Эмоция:", kb.as_markup())
     if st:
         st.params = []
     await cq.answer()
@@ -381,7 +381,7 @@ async def cim_more_param(cq: types.CallbackQuery):
         kb.button(text="Добавить все", callback_data="ca_all")
     kb.button(text="⬅️", callback_data="c_cancel")
     kb.adjust(2)
-    await cq.message.edit_text("Дополнительная эмоция:", reply_markup=kb.as_markup())
+    await _edit(cq.message, "Дополнительная эмоция:", kb.as_markup())
     await cq.answer()
 
 
