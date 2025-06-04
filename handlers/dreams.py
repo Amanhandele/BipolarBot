@@ -8,7 +8,7 @@ from aiogram.filters import Command
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from Token import AUTHORIZED_USER_IDS
-from utils.storage import save_jsonl
+from utils.storage import save_json
 
 router = Router()
 
@@ -103,7 +103,7 @@ async def _commit(uid: int, dream_txt: str, date_iso: Optional[str] = None):
         "metrics": metrics,
         "date": date_iso,
     }
-    save_jsonl(uid, "dreams", "dream", payload)
+    save_json(uid, "dreams", "dream", payload)
     return analysis, metrics
 
 
@@ -141,7 +141,7 @@ async def dream_buttons(cq: types.CallbackQuery):
         "dream_frag": "Помню урывками",
     }
     label = label_map.get(code, code)
-    save_jsonl(uid, "dreams", "dream", {"dream": label, "analysis": "(нет)"})
+    save_json(uid, "dreams", "dream", {"dream": label, "analysis": "(нет)"})
     _waiting.pop(uid, None)
     await cq.message.edit_text(f"📑 Записал: {label}")
     from handlers.manage import main_kb
