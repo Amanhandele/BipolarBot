@@ -1,6 +1,7 @@
 # handlers/dreams.py
 # ───────────────────────────────────────────────────────────
-import asyncio, datetime, openai
+import asyncio, datetime
+from openai import AsyncOpenAI
 from typing import Optional
 from aiogram import Router, types
 from aiogram.filters import Command
@@ -31,14 +32,14 @@ def dream_kb() -> types.InlineKeyboardMarkup:
 async def analyze(text: str) -> str:
     try:
         from Token import OPENAI_API_KEY
-        openai.api_key = OPENAI_API_KEY
         if not OPENAI_API_KEY:
             raise Exception("Фича с анализом снов через чатгпт пока не работает.")
-        resp = await openai.ChatCompletion.acreate(
+        client = AsyncOpenAI(api_key=OPENAI_API_KEY)
+        resp = await client.chat.completions.create(
             model="gpt-4o",
             messages=[
                 {"role": "system", "content": "Проанализируй нижеследующий сон по Юнгу."},
-                {"role": "user",   "content": text}
+                {"role": "user", "content": text},
             ],
             max_tokens=3500,
             temperature=0.7,
