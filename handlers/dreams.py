@@ -1,6 +1,6 @@
 # handlers/dreams.py
 # ───────────────────────────────────────────────────────────
-import asyncio, datetime
+import asyncio, datetime, json, re
 from openai import AsyncOpenAI
 from typing import Optional
 from aiogram import Router, types
@@ -38,7 +38,14 @@ async def analyze(text: str) -> str:
         resp = await client.chat.completions.create(
             model="gpt-4o",
             messages=[
-                {"role": "system", "content": "Проанализируй нижеследующий сон по Юнгу."},
+                {
+                    "role": "system",
+                    "content": (
+                        "Ты психоаналитик. Проанализируй сон по Юнгу. "
+                        "В конце ответа выведи JSON одной строкой с ключами "
+                        "intensity (0.5-3) и emotions (список эмоций)."
+                    ),
+                },
                 {"role": "user", "content": text},
             ],
             max_tokens=3500,
@@ -50,12 +57,37 @@ async def analyze(text: str) -> str:
 
 
 async def _commit(uid: int, dream_txt: str, date_iso: Optional[str] = None):
-    analysis = await analyze(dream_txt)
+    raw = await analyze(dream_txt)
+    metrics = {}
+    analysis = raw
+    m = re.search(r"\{.*\}", raw, re.S)
+    if m:
+        json_str = m.group()
+        try:
+            metrics = json.loads(json_str)
+        except Exception:
+            metrics = {}
+        analysis = raw[: m.start()].strip()
+
+    intensity = metrics.get("intensity")
+    emotions = metrics.get("emotions") or []
+    if intensity and emotions:
+        from config import EMOTION_COEFF
+        coeffs = [EMOTION_COEFF.get(e.lower(), 0) for e in emotions]
+        if coeffs:
+            e_val = sum(coeffs) / len(coeffs)
+            metrics["cim_score"] = round(float(intensity) * e_val, 2)
+
     if not date_iso:
         date_iso = datetime.date.today().isoformat()
-    payload = {"dream": dream_txt, "analysis": analysis, "date": date_iso}
+    payload = {
+        "dream": dream_txt,
+        "analysis": analysis,
+        "metrics": metrics,
+        "date": date_iso,
+    }
     save_jsonl(uid, "dreams", "dream", payload)
-    return analysis
+    return analysis, metrics
 
 
 # ───── команды /dream и кнопки ─────────────────────────────
@@ -65,8 +97,16 @@ async def cmd_dream(msg: types.Message):
         return
     text = msg.text.replace("/dream", "", 1).strip()
     if text:
-        analysis = await _commit(msg.from_user.id, text, None)
-        await msg.reply(f"🌓 Анализ сна:\n{analysis}")
+        analysis, metrics = await _commit(msg.from_user.id, text, None)
+        extra = []
+        if metrics.get("cim_score") is not None:
+            extra.append(f"CIM-score: {metrics['cim_score']}")
+        if metrics.get("intensity") is not None:
+            extra.append(f"I: {metrics['intensity']}")
+        if metrics.get("emotions"):
+            extra.append("эмоции: " + ", ".join(metrics["emotions"]))
+        addon = "\n\n" + ", ".join(extra) if extra else ""
+        await msg.reply(f"🌓 Анализ сна:\n{analysis}{addon}")
     else:
         # ставим флаг ожидания текста
         _waiting[msg.from_user.id] = None
@@ -103,5 +143,13 @@ async def dream_buttons(cq: types.CallbackQuery):
 async def catch_dream(msg: types.Message):
     uid = msg.from_user.id
     date_iso = _waiting.pop(uid)
-    analysis = await _commit(uid, msg.text, date_iso)
-    await msg.reply(f"🌓 Анализ сна:\n{analysis}")
+    analysis, metrics = await _commit(uid, msg.text, date_iso)
+    extra = []
+    if metrics.get("cim_score") is not None:
+        extra.append(f"CIM-score: {metrics['cim_score']}")
+    if metrics.get("intensity") is not None:
+        extra.append(f"I: {metrics['intensity']}")
+    if metrics.get("emotions"):
+        extra.append("эмоции: " + ", ".join(metrics["emotions"]))
+    addon = "\n\n" + ", ".join(extra) if extra else ""
+    await msg.reply(f"🌓 Анализ сна:\n{analysis}{addon}")
