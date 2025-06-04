@@ -79,8 +79,81 @@ def plot_multi(uid: int, params: list[str], period: str, out: str, page: int = 0
     for p in params:
         if p in grp.columns:
             plt.plot(grp.index, grp[p], "-o", label=p)
+
+    # ───── оформление оси X ────────────────────────────────
+    months_nom = [
+        "январь", "февраль", "март", "апрель", "май", "июнь",
+        "июль", "август", "сентябрь", "октябрь", "ноябрь", "декабрь",
+    ]
+    months_gen = [
+        "января", "февраля", "марта", "апреля", "мая", "июня",
+        "июля", "августа", "сентября", "октября", "ноября", "декабря",
+    ]
+
+    dates = grp.index.to_pydatetime()
+    labels = []
+    ticks = []
+
+    if period == "week":
+        ticks = dates
+        labels = [f"{d.day} {months_gen[d.month-1]}" for d in dates]
+        start = dates[0].date(); end = dates[-1].date()
+        if start.year == end.year:
+            if start.month == end.month:
+                xlabel = f"{months_nom[start.month-1]} {start.year}"
+            else:
+                xlabel = f"{months_nom[start.month-1]}-{months_nom[end.month-1]} {start.year}"
+        else:
+            xlabel = (
+                f"{months_nom[start.month-1]} {start.year}-"
+                f"{months_nom[end.month-1]} {end.year}"
+            )
+
+    elif period == "month":
+        step = max(1, len(dates) // 6)
+        ticks = dates[::step]
+        labels = [f"{d.day} {months_gen[d.month-1]}" for d in ticks]
+        start = dates[0].date(); end = dates[-1].date()
+        if start.month == end.month and start.year == end.year:
+            xlabel = f"{months_nom[start.month-1]} {start.year}"
+        else:
+            if start.year == end.year:
+                xlabel = f"{months_nom[start.month-1]}-{months_nom[end.month-1]} {start.year}"
+            else:
+                xlabel = (
+                    f"{months_nom[start.month-1]} {start.year}-"
+                    f"{months_nom[end.month-1]} {end.year}"
+                )
+
+    elif period == "year":
+        # первые числа месяцев
+        start = dates[0].replace(day=1)
+        end_dt = dates[-1].replace(day=1)
+        months_range = pd.date_range(start=start, end=end_dt, freq="MS")
+        ticks = months_range.to_pydatetime()
+        labels = [months_nom[d.month-1] for d in ticks]
+        y1 = ticks[0].year
+        y2 = ticks[-1].year
+        xlabel = f"{y1} год" if y1 == y2 else f"{y1}-{y2} годы"
+
+    else:  # period == "all"
+        start = dates[0]
+        end = dates[-1]
+        months_range = pd.date_range(start=start.replace(day=1), end=end, freq="MS")
+        step = max(1, len(months_range) // 6)
+        ticks = months_range[::step].to_pydatetime()
+        labels = [f"{months_nom[d.month-1]} {str(d.year % 100).zfill(2)}" for d in ticks]
+        xlabel = (
+            f"{months_nom[start.month-1]} {start.year} - "
+            f"{months_nom[end.month-1]} {end.year}"
+        )
+
+    plt.xticks(ticks, labels, rotation=45, ha="right")
+    plt.xlabel(xlabel)
+
     plt.legend()
     plt.title(f"{', '.join(params)} ({period})")
+    plt.tight_layout()
     plt.savefig(out)
     plt.close()
     return out
