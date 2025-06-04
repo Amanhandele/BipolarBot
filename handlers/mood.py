@@ -109,3 +109,5 @@ async def summary_or_plain(msg: types.Message):
     await _save_final(msg.from_user.id)
     _state.pop(msg.from_user.id, None)
     await msg.reply("✅ Сохранено!")
+    from handlers.manage import main_kb
+    await msg.answer("Меню:", reply_markup=main_kb())

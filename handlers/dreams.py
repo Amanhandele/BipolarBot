@@ -1,6 +1,6 @@
 # handlers/dreams.py
 # ───────────────────────────────────────────────────────────
-import asyncio, datetime
+import asyncio, datetime, json, re
 from openai import AsyncOpenAI
 from typing import Optional
 from aiogram import Router, types
@@ -11,6 +11,18 @@ from Token import AUTHORIZED_USER_IDS
 from utils.storage import save_jsonl
 
 router = Router()
+
+
+def _fmt_metrics(metrics: dict) -> str:
+    """Return short text summary from metrics."""
+    extra = []
+    if metrics.get("cim_score") is not None:
+        extra.append(f"CIM-score: {metrics['cim_score']}")
+    if metrics.get("intensity") is not None:
+        extra.append(f"I: {metrics['intensity']}")
+    if metrics.get("emotions"):
+        extra.append("эмоции: " + ", ".join(metrics["emotions"]))
+    return ("\n\n" + "; ".join(extra)) if extra else ""
 
 
 # user_id → date (None = сегодня)
@@ -30,17 +42,27 @@ def dream_kb() -> types.InlineKeyboardMarkup:
 
 # ───── GPT-анализ ──────────────────────────────────────────
 async def analyze(text: str) -> str:
+    """Return GPT analysis with metrics line."""
     try:
         from Token import OPENAI_API_KEY
         if not OPENAI_API_KEY:
             raise Exception("Фича с анализом снов через чатгпт пока не работает.")
+        from config import CIM_EMOTIONS
+
+        emotions = ", ".join(CIM_EMOTIONS)
+        prompt = (
+            "Ты психоаналитик. Проведи юнгианский анализ сна. "
+            "Сначала дай короткий текст анализа без форматирования Markdown, "
+            "чтобы его удобно читать в Telegram. "
+            "Для расчёта CIM-анализа перечисли эмоции только из списка: "
+            f"{emotions}. "
+            "В конце ответа отдельной строкой напиши 'METRICS: '{\"intensity\": <0.5-3>, \"emotions\":[...]}'."
+        )
+
         client = AsyncOpenAI(api_key=OPENAI_API_KEY)
         resp = await client.chat.completions.create(
             model="gpt-4o",
-            messages=[
-                {"role": "system", "content": "Проанализируй нижеследующий сон по Юнгу."},
-                {"role": "user", "content": text},
-            ],
+            messages=[{"role": "system", "content": prompt}, {"role": "user", "content": text}],
             max_tokens=3500,
             temperature=0.7,
         )
@@ -50,12 +72,37 @@ async def analyze(text: str) -> str:
 
 
 async def _commit(uid: int, dream_txt: str, date_iso: Optional[str] = None):
-    analysis = await analyze(dream_txt)
+    raw = await analyze(dream_txt)
+    metrics = {}
+    analysis = raw
+    m = re.search(r"METRICS:\s*(\{.*\})", raw, re.S)
+    if m:
+        json_str = m.group(1)
+        try:
+            metrics = json.loads(json_str)
+        except Exception:
+            metrics = {}
+        analysis = raw[: m.start()].strip()
+
+    intensity = metrics.get("intensity")
+    emotions = metrics.get("emotions") or []
+    if intensity and emotions:
+        from config import EMOTION_COEFF
+        coeffs = [EMOTION_COEFF.get(e.lower(), 0) for e in emotions]
+        if coeffs:
+            e_val = sum(coeffs) / len(coeffs)
+            metrics["cim_score"] = round(float(intensity) * e_val, 2)
+
     if not date_iso:
         date_iso = datetime.date.today().isoformat()
-    payload = {"dream": dream_txt, "analysis": analysis, "date": date_iso}
+    payload = {
+        "dream": dream_txt,
+        "analysis": analysis,
+        "metrics": metrics,
+        "date": date_iso,
+    }
     save_jsonl(uid, "dreams", "dream", payload)
-    return analysis
+    return analysis, metrics
 
 
 # ───── команды /dream и кнопки ─────────────────────────────
@@ -65,8 +112,8 @@ async def cmd_dream(msg: types.Message):
         return
     text = msg.text.replace("/dream", "", 1).strip()
     if text:
-        analysis = await _commit(msg.from_user.id, text, None)
-        await msg.reply(f"🌓 Анализ сна:\n{analysis}")
+        analysis, metrics = await _commit(msg.from_user.id, text, None)
+        await msg.reply(f"🌓 Анализ сна:\n{analysis}{_fmt_metrics(metrics)}")
     else:
         # ставим флаг ожидания текста
         _waiting[msg.from_user.id] = None
@@ -95,6 +142,8 @@ async def dream_buttons(cq: types.CallbackQuery):
     save_jsonl(uid, "dreams", "dream", {"dream": label, "analysis": "(нет)"})
     _waiting.pop(uid, None)
     await cq.message.edit_text(f"📑 Записал: {label}")
+    from handlers.manage import main_kb
+    await cq.message.answer("Меню:", reply_markup=main_kb())
     await cq.answer()
 
 
@@ -103,5 +152,5 @@ async def dream_buttons(cq: types.CallbackQuery):
 async def catch_dream(msg: types.Message):
     uid = msg.from_user.id
     date_iso = _waiting.pop(uid)
-    analysis = await _commit(uid, msg.text, date_iso)
-    await msg.reply(f"🌓 Анализ сна:\n{analysis}")
+    analysis, metrics = await _commit(uid, msg.text, date_iso)
+    await msg.reply(f"🌓 Анализ сна:\n{analysis}{_fmt_metrics(metrics)}")

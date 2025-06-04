@@ -7,7 +7,7 @@ from aiogram.filters import Command
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from handlers import view_dreams
 from utils.env import AUTHORIZED_USER_IDS
-from config import PARAMETERS, load_user_times, save_user_times
+from config import PARAMETERS, GRAPH_PARAMS, CIM_EMOTIONS, load_user_times, save_user_times
 from analysis.generate_plot import plot_multi
 from analysis.fourier import save_fft
 from utils.storage import user_dir
@@ -31,6 +31,7 @@ class GraphState:
 
 
 _graph_state: dict[int, GraphState] = {}
+_cim_state: dict[int, GraphState] = {}
 
 router = Router()
 
@@ -41,6 +42,7 @@ def main_kb() -> types.InlineKeyboardMarkup:
     kb.button(text="📈 График",        callback_data="mg_graph")
     kb.button(text="🔍 FFT",           callback_data="mg_fft")
     kb.button(text="📚 Сны",           callback_data="mg_dreams")
+    kb.button(text="🎭 CIM-анализ",   callback_data="mg_cim")
     kb.button(text="🗓 Пропуски",      callback_data="mg_missed")
     kb.button(text="🕒 Напоминания",   callback_data="mg_time")
     kb.button(text="📝 Чек-ин",        callback_data="mg_now")
@@ -146,7 +148,7 @@ async def g_choose_param(cq: types.CallbackQuery):
     st.params = []
     st.msg_id = None
     kb = InlineKeyboardBuilder()
-    for k, l in PARAMETERS:
+    for k, l in GRAPH_PARAMS:
         kb.button(text=l, callback_data=f"gp_add_{k}")
     kb.button(text="⬅️", callback_data="mg_graph")
     kb.adjust(2)
@@ -163,9 +165,10 @@ async def _show_graph(bot: Bot, uid: int, st: GraphState, message: types.Message
         kb.button(text="➡️", callback_data="gnext")
     kb.adjust(2)
     kb.button(text="Выбрать другой параметр", callback_data="g_new")
-    if len(st.params) < len(PARAMETERS):
+    if len(st.params) < len(GRAPH_PARAMS):
         kb.button(text="Выбрать дополнительный параметр", callback_data="g_more")
     kb.adjust(1)
+    kb.button(text="⬅️ Меню", callback_data="mg_back")
     if st.msg_id:
         try:
             await bot.delete_message(uid, st.msg_id)
@@ -197,7 +200,7 @@ async def g_new_param(cq: types.CallbackQuery):
             pass
         st.msg_id = None
     kb = InlineKeyboardBuilder()
-    for k, l in PARAMETERS:
+    for k, l in GRAPH_PARAMS:
         kb.button(text=l, callback_data=f"gp_add_{k}")
     kb.button(text="⬅️", callback_data="mg_graph")
     kb.adjust(2)
@@ -213,8 +216,8 @@ async def g_more_param(cq: types.CallbackQuery):
     if not st:
         await cq.answer(); return
     kb = InlineKeyboardBuilder()
-    remaining = [k for k, _ in PARAMETERS if k not in st.params]
-    for k, l in PARAMETERS:
+    remaining = [k for k, _ in GRAPH_PARAMS if k not in st.params]
+    for k, l in GRAPH_PARAMS:
         if k in remaining:
             kb.button(text=l, callback_data=f"ga_{k}")
     if remaining:
@@ -240,7 +243,7 @@ async def g_add_param(cq: types.CallbackQuery, bot: Bot):
     if not st:
         await cq.answer(); return
     if cq.data == "ga_all":
-        st.params = [k for k, _ in PARAMETERS]
+        st.params = [k for k, _ in GRAPH_PARAMS]
     else:
         param = cq.data.split("_", 1)[1]
         if param not in st.params:
@@ -262,11 +265,154 @@ async def g_nav(cq: types.CallbackQuery, bot: Bot):
     await cq.answer()
 
 
+# ───── CIM-анализ ─────────────────────────────────────────
+@router.callback_query(lambda c: c.data == "mg_cim")
+async def cim_period(cq: types.CallbackQuery):
+    kb = InlineKeyboardBuilder()
+    for p, t in [
+        ("all", "Весь доступный диапазон"),
+        ("year", "Год"),
+        ("month", "Месяц"),
+        ("week", "Неделя"),
+    ]:
+        kb.button(text=t, callback_data=f"cp_set_{p}")
+    kb.button(text="⬅️", callback_data="mg_back")
+    kb.adjust(1)
+    await cq.message.edit_text("Период:", reply_markup=kb.as_markup())
+    await cq.answer()
+
+
+@router.callback_query(lambda c: c.data.startswith("cp_set_"))
+async def cim_choose_param(cq: types.CallbackQuery):
+    period = cq.data.split("_", 2)[2]
+    st = _cim_state.setdefault(cq.from_user.id, GraphState())
+    st.period = period
+    st.page = 0
+    st.params = []
+    st.msg_id = None
+    kb = InlineKeyboardBuilder()
+    for e in CIM_EMOTIONS:
+        kb.button(text=e, callback_data=f"cp_add_{e}")
+    kb.button(text="⬅️", callback_data="mg_cim")
+    kb.adjust(2)
+    await cq.message.edit_text("Эмоция:", reply_markup=kb.as_markup())
+    await cq.answer()
+
+
+async def _show_cim(bot: Bot, uid: int, st: GraphState, message: types.Message):
+    path = user_dir(uid) / "cim_plot.png"
+    params = [f"emo_{p}" for p in st.params]
+    res = plot_multi(uid, params, st.period, str(path), st.page)
+    kb = InlineKeyboardBuilder()
+    if st.period != "all":
+        kb.button(text="⬅️", callback_data="cprev")
+        kb.button(text="➡️", callback_data="cnext")
+    kb.adjust(2)
+    kb.button(text="Выбрать другую эмоцию", callback_data="c_new")
+    if len(st.params) < len(CIM_EMOTIONS):
+        kb.button(text="Добавить эмоцию", callback_data="c_more")
+    kb.adjust(1)
+    kb.button(text="⬅️ Меню", callback_data="mg_back")
+    if st.msg_id:
+        try:
+            await bot.delete_message(uid, st.msg_id)
+        except Exception:
+            pass
+    if res:
+        msg = await bot.send_photo(uid, FSInputFile(res), reply_markup=kb.as_markup())
+    else:
+        msg = await bot.send_message(uid, "Нет данных.", reply_markup=kb.as_markup())
+    st.msg_id = msg.message_id
+
+
+@router.callback_query(lambda c: c.data.startswith("cp_add_"))
+async def cim_first_param(cq: types.CallbackQuery, bot: Bot):
+    param = cq.data.split("_", 2)[2]
+    st = _cim_state.setdefault(cq.from_user.id, GraphState())
+    st.params = [param]
+    await _show_cim(bot, cq.from_user.id, st, cq.message)
+    await cq.answer()
+
+
+@router.callback_query(lambda c: c.data == "c_new")
+async def cim_new_param(cq: types.CallbackQuery):
+    st = _cim_state.get(cq.from_user.id)
+    if st and st.msg_id:
+        try:
+            await cq.bot.delete_message(cq.from_user.id, st.msg_id)
+        except Exception:
+            pass
+        st.msg_id = None
+    kb = InlineKeyboardBuilder()
+    for e in CIM_EMOTIONS:
+        kb.button(text=e, callback_data=f"cp_add_{e}")
+    kb.button(text="⬅️", callback_data="mg_cim")
+    kb.adjust(2)
+    await cq.message.edit_text("Эмоция:", reply_markup=kb.as_markup())
+    if st:
+        st.params = []
+    await cq.answer()
+
+
+@router.callback_query(lambda c: c.data == "c_more")
+async def cim_more_param(cq: types.CallbackQuery):
+    st = _cim_state.get(cq.from_user.id)
+    if not st:
+        await cq.answer(); return
+    kb = InlineKeyboardBuilder()
+    remaining = [e for e in CIM_EMOTIONS if e not in st.params]
+    for e in remaining:
+        kb.button(text=e, callback_data=f"ca_{e}")
+    if remaining:
+        kb.button(text="Добавить все", callback_data="ca_all")
+    kb.button(text="⬅️", callback_data="c_cancel")
+    kb.adjust(2)
+    await cq.message.edit_text("Дополнительная эмоция:", reply_markup=kb.as_markup())
+    await cq.answer()
+
+
+@router.callback_query(lambda c: c.data == "c_cancel")
+async def cim_cancel_more(cq: types.CallbackQuery, bot: Bot):
+    st = _cim_state.get(cq.from_user.id)
+    if not st:
+        await cq.answer(); return
+    await _show_cim(bot, cq.from_user.id, st, cq.message)
+    await cq.answer()
+
+
+@router.callback_query(lambda c: c.data.startswith("ca_") or c.data == "ca_all")
+async def cim_add_param(cq: types.CallbackQuery, bot: Bot):
+    st = _cim_state.get(cq.from_user.id)
+    if not st:
+        await cq.answer(); return
+    if cq.data == "ca_all":
+        st.params = list(CIM_EMOTIONS)
+    else:
+        param = cq.data.split("_", 1)[1]
+        if param not in st.params:
+            st.params.append(param)
+    await _show_cim(bot, cq.from_user.id, st, cq.message)
+    await cq.answer()
+
+
+@router.callback_query(lambda c: c.data in ("cprev", "cnext"))
+async def cim_nav(cq: types.CallbackQuery, bot: Bot):
+    st = _cim_state.get(cq.from_user.id)
+    if not st:
+        await cq.answer(); return
+    if cq.data == "cprev":
+        st.page += 1
+    else:
+        st.page = max(0, st.page - 1)
+    await _show_cim(bot, cq.from_user.id, st, cq.message)
+    await cq.answer()
+
+
 # ───── кнопка FFT ─────────────────────────────────────────
 @router.callback_query(lambda c: c.data == "mg_fft")
 async def fft_param(cq: types.CallbackQuery):
     kb = InlineKeyboardBuilder()
-    for k, l in PARAMETERS:
+    for k, l in GRAPH_PARAMS:
         kb.button(text=l, callback_data=f"f_{k}")
     kb.button(text="⬅️", callback_data="mg_back")
     kb.adjust(2)
@@ -279,10 +425,12 @@ async def send_fft(cq: types.CallbackQuery, bot: Bot):
     param = cq.data[2:]
     path = user_dir(cq.from_user.id) / f"{param}_fft.png"
     res = save_fft(cq.from_user.id, param, str(path))
+    kb = InlineKeyboardBuilder()
+    kb.button(text="⬅️ Меню", callback_data="mg_back")
     if res:
-        await bot.send_photo(cq.from_user.id, photo=FSInputFile(res))
+        await bot.send_photo(cq.from_user.id, photo=FSInputFile(res), reply_markup=kb.as_markup())
     else:
-        await bot.send_message(cq.from_user.id, "Нет данных.")
+        await bot.send_message(cq.from_user.id, "Нет данных.", reply_markup=kb.as_markup())
     await cq.answer()
 
 
