@@ -181,6 +181,7 @@ async def _show_graph(bot: Bot, uid: int, st: GraphState, message: types.Message
     if len(st.params) < len(GRAPH_PARAMS):
         kb.button(text="Выбрать дополнительный параметр", callback_data="g_more")
     kb.adjust(1)
+    kb.button(text="⬅️ Меню", callback_data="mg_back")
     if st.msg_id:
         try:
             await bot.delete_message(uid, st.msg_id)
@@ -324,6 +325,8 @@ async def _show_cim(bot: Bot, uid: int, st: GraphState, message: types.Message):
     if len(st.params) < len(CIM_EMOTIONS):
         kb.button(text="Добавить эмоцию", callback_data="c_more")
     kb.adjust(1)
+    kb.button(text="⬅️ Меню", callback_data="mg_back")
+
     if st.msg_id:
         try:
             await bot.delete_message(uid, st.msg_id)
@@ -436,10 +439,12 @@ async def send_fft(cq: types.CallbackQuery, bot: Bot):
     param = cq.data[2:]
     path = user_dir(cq.from_user.id) / f"{param}_fft.png"
     res = save_fft(cq.from_user.id, param, str(path))
+    kb = InlineKeyboardBuilder()
+    kb.button(text="⬅️ Меню", callback_data="mg_back")
     if res:
-        await bot.send_photo(cq.from_user.id, photo=FSInputFile(res))
+        await bot.send_photo(cq.from_user.id, photo=FSInputFile(res), reply_markup=kb.as_markup())
     else:
-        await bot.send_message(cq.from_user.id, "Нет данных.")
+        await bot.send_message(cq.from_user.id, "Нет данных.", reply_markup=kb.as_markup())
     await cq.answer()
 
 
