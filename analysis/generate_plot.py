@@ -103,13 +103,22 @@ def plot_multi(uid: int, params: list[str], period: str, out: str, page: int = 0
     plt.figure()
     for p in params:
         if p in mean.columns:
+            series = mean[p].dropna()
+            if series.empty:
+                continue
             if len(params) > 1:
-                plt.plot(mean.index, mean[p], label=p)
+                plt.plot(series.index, series, label=p)
             else:
                 if step > 1:
-                    plt.errorbar(mean.index, mean[p], yerr=std[p], fmt="-o", label=p)
+                    plt.errorbar(
+                        series.index,
+                        series,
+                        yerr=std[p].loc[series.index],
+                        fmt="-o",
+                        label=p,
+                    )
                 else:
-                    plt.plot(mean.index, mean[p], "-o", label=p)
+                    plt.plot(series.index, series, "-o", label=p)
 
     # ───── оформление оси X ────────────────────────────────
     months_nom = [

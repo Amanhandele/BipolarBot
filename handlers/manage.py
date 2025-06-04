@@ -459,7 +459,7 @@ async def fft_param(cq: types.CallbackQuery):
     await cq.answer()
 
 
-@router.callback_query(lambda c: re.match(r"f_\\w+", c.data))
+@router.callback_query(lambda c: c.data.startswith("f_"))
 async def send_fft(cq: types.CallbackQuery, bot: Bot):
     param = cq.data[2:]
     path = user_dir(cq.from_user.id) / f"{param}_fft.png"
@@ -489,7 +489,11 @@ async def time_view(cq: types.CallbackQuery):
 @router.callback_query(lambda c: c.data == "mg_export")
 async def exp(cq: types.CallbackQuery, bot: Bot):
     path = export(cq.from_user.id)
-    await bot.send_document(cq.from_user.id, open(path, "rb"), caption="Экспорт")
+    await bot.send_document(
+        cq.from_user.id,
+        FSInputFile(path),
+        caption="Экспорт",
+    )
     await cq.answer()
 
 
@@ -506,6 +510,8 @@ async def receive_param(msg: types.Message):
     label = msg.text.strip()
     add_custom_param(msg.from_user.id, label)
     await msg.reply(f"Добавлен параметр: {label}")
+    from handlers.manage import main_kb
+    await msg.answer("Меню:", reply_markup=main_kb())
 
 
 # ───── кнопка Пропуски ────────────────────────────────────

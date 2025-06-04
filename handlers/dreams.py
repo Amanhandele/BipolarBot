@@ -68,11 +68,16 @@ async def _finish(uid: int, bot: Bot):
     except Exception:
         pass
     text = "\n".join(info["msgs"]).strip()
-    if not text:
-        await bot.send_message(uid, "Запись сна отменена.")
-        return
-    analysis, metrics = await _commit(uid, text, info["date"])
-    await bot.send_message(uid, f"🌓 Анализ сна:\n{analysis}{_fmt_metrics(metrics)}")
+    if text:
+        analysis, metrics = await _commit(uid, text, info["date"])
+        await bot.send_message(
+            uid,
+            f"🌓 Анализ сна:\n{analysis}{_fmt_metrics(metrics)}",
+        )
+    else:
+        payload = {"dream": "", "analysis": "", "metrics": {}, "date": info["date"]}
+        save_json(uid, "dreams", "dream", payload)
+        await bot.send_message(uid, "Сон сохранён (пусто).")
 
 
 # ───── GPT-анализ ──────────────────────────────────────────
@@ -108,18 +113,21 @@ async def analyze(text: str) -> str:
 
 
 async def _commit(uid: int, dream_txt: str, date_iso: Optional[str] = None):
-    raw = await analyze(dream_txt)
     metrics = {}
-    analysis = raw
-    m = re.search(r"METRICS:\s*(\{.*\})", raw, re.S)
-    if m:
-        json_str = m.group(1)
+    analysis = ""
+    raw = ""
+    if dream_txt.strip():
+        raw = await analyze(dream_txt)
+        analysis = raw
+        m = re.search(r"METRICS:\s*(\{.*\})", raw, re.S)
+        if m:
+            json_str = m.group(1)
 
-        try:
-            metrics = json.loads(json_str)
-        except Exception:
-            metrics = {}
-        analysis = raw[: m.start()].strip()
+            try:
+                metrics = json.loads(json_str)
+            except Exception:
+                metrics = {}
+            analysis = raw[: m.start()].strip()
 
     intensity = metrics.get("intensity")
     emotions = metrics.get("emotions") or []
@@ -175,8 +183,10 @@ async def dream_buttons(cq: types.CallbackQuery, bot: Bot):
         "dream_frag": "Помню урывками",
     }
     label = label_map.get(code, code)
-    save_json(uid, "dreams", "dream", {"dream": label, "analysis": "(нет)"})
-    _active.pop(uid, None)
+    info = _active.pop(uid, None)
+    date_iso = info.get("date") if info else datetime.date.today().isoformat()
+    payload = {"dream": label, "analysis": "(нет)", "metrics": {}, "date": date_iso}
+    save_json(uid, "dreams", "dream", payload)
     await cq.message.edit_text(f"📑 Записал: {label}")
     from handlers.manage import main_kb
     await cq.message.answer("Меню:", reply_markup=main_kb())
