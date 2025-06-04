@@ -62,6 +62,7 @@ async def analyze(text: str) -> str:
         client = AsyncOpenAI(api_key=OPENAI_API_KEY)
         resp = await client.chat.completions.create(
             model="gpt-4o",
+
             messages=[{"role": "system", "content": prompt}, {"role": "user", "content": text}],
             max_tokens=3500,
             temperature=0.7,
@@ -78,6 +79,7 @@ async def _commit(uid: int, dream_txt: str, date_iso: Optional[str] = None):
     m = re.search(r"METRICS:\s*(\{.*\})", raw, re.S)
     if m:
         json_str = m.group(1)
+
         try:
             metrics = json.loads(json_str)
         except Exception:
