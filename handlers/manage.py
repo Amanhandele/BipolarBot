@@ -476,5 +476,5 @@ async def exp(cq: types.CallbackQuery, bot: Bot):
 # ───── Назад ──────────────────────────────────────────────
 @router.callback_query(lambda c: c.data == "mg_back")
 async def back(cq: types.CallbackQuery):
-    await cq.message.edit_text("Меню:", reply_markup=main_kb())
+    await _edit(cq.message, "Меню:", main_kb())
     await cq.answer()
