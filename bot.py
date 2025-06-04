@@ -26,14 +26,14 @@ sched=AsyncIOScheduler()
 
 async def setup_commands():
     cmds = [
-        BotCommand("start", "Старт"),
-        BotCommand("menu", "Меню"),
-        BotCommand("checkin", "Быстрый чек-ин"),
-        BotCommand("dream", "Записать сон"),
-        BotCommand("dreams", "Список снов"),
-        BotCommand("set", "Время уведомлений"),
-        BotCommand("login", "Ввести пароль"),
-        BotCommand("register", "Новый пароль"),
+        BotCommand(command="start", description="Старт"),
+        BotCommand(command="menu", description="Меню"),
+        BotCommand(command="checkin", description="Быстрый чек-ин"),
+        BotCommand(command="dream", description="Записать сон"),
+        BotCommand(command="dreams", description="Список снов"),
+        BotCommand(command="set", description="Время уведомлений"),
+        BotCommand(command="login", description="Ввести пароль"),
+        BotCommand(command="register", description="Новый пароль"),
     ]
     await bot.set_my_commands(cmds)
 
