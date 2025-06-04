@@ -81,10 +81,10 @@ def plot_multi(uid: int, params: list[str], period: str, out: str, page: int = 0
     if df.empty:
         return None
 
-    df = df.dropna(subset=params).sort_values("date")
+    df = df.sort_values("date")
     df.set_index("date", inplace=True)
 
-    daily_mean = df[params].resample("1D").mean()
+    daily_mean = df[params].resample("1D").mean().dropna(how="all")
     if daily_mean.empty:
         return None
 
@@ -93,8 +93,8 @@ def plot_multi(uid: int, params: list[str], period: str, out: str, page: int = 0
         span = (daily_mean.index[-1] - daily_mean.index[0]).days + 1
         step = max(1, ceil(span / 60))
 
-    mean = df[params].resample(f"{step}D").mean()
-    std = df[params].resample(f"{step}D").std().fillna(0)
+    mean = daily_mean.resample(f"{step}D").mean()
+    std = daily_mean.resample(f"{step}D").std().fillna(0)
 
     plt.figure()
     for p in params:

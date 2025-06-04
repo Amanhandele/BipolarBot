@@ -3,7 +3,7 @@
 import asyncio, datetime, json, re
 from openai import AsyncOpenAI
 from typing import Optional
-from aiogram import Router, types
+from aiogram import Router, types, Bot
 from aiogram.filters import Command
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
@@ -25,8 +25,9 @@ def _fmt_metrics(metrics: dict) -> str:
     return ("\n\n" + "; ".join(extra)) if extra else ""
 
 
-# user_id → date (None = сегодня)
-_waiting: dict[int, str] = {}
+# user_id → {"msgs": list[str], "btn": int, "task": asyncio.Task, "date": str}
+_active: dict[int, dict] = {}
+TIMEOUT = 900  # 15 минут
 
 
 # ───── клавиатура ──────────────────────────────────────────
@@ -38,6 +39,40 @@ def dream_kb() -> types.InlineKeyboardMarkup:
     kb.button(text="Помню урывками",   callback_data="dream_frag")
     kb.adjust(1)
     return kb.as_markup()
+
+
+async def _timeout(uid: int, bot: Bot):
+    await asyncio.sleep(TIMEOUT)
+    if uid in _active:
+        await _finish(uid, bot)
+
+
+async def start_record(bot: Bot, uid: int, date_iso: Optional[str] = None):
+    if date_iso is None:
+        date_iso = datetime.date.today().isoformat()
+    kb = InlineKeyboardBuilder()
+    kb.button(text="🏁 Закончить запись", callback_data="dream_end")
+    msg = await bot.send_message(uid, "Записываю сон…", reply_markup=kb.as_markup())
+    task = asyncio.create_task(_timeout(uid, bot))
+    _active[uid] = {"msgs": [], "btn": msg.message_id, "task": task, "date": date_iso}
+
+
+async def _finish(uid: int, bot: Bot):
+    info = _active.pop(uid, None)
+    if not info:
+        return
+    if info["task"]:
+        info["task"].cancel()
+    try:
+        await bot.delete_message(uid, info["btn"])
+    except Exception:
+        pass
+    text = "\n".join(info["msgs"]).strip()
+    if not text:
+        await bot.send_message(uid, "Запись сна отменена.")
+        return
+    analysis, metrics = await _commit(uid, text, info["date"])
+    await bot.send_message(uid, f"🌓 Анализ сна:\n{analysis}{_fmt_metrics(metrics)}")
 
 
 # ───── GPT-анализ ──────────────────────────────────────────
@@ -117,20 +152,19 @@ async def cmd_dream(msg: types.Message):
         analysis, metrics = await _commit(msg.from_user.id, text, None)
         await msg.reply(f"🌓 Анализ сна:\n{analysis}{_fmt_metrics(metrics)}")
     else:
-        # ставим флаг ожидания текста
-        _waiting[msg.from_user.id] = None
         await msg.reply("Отправь текст сна сообщением или выбери кнопку:", reply_markup=dream_kb())
+        await start_record(msg.bot, msg.from_user.id)
 
 
 @router.callback_query(lambda c: c.data.startswith("dream_"))
-async def dream_buttons(cq: types.CallbackQuery):
+async def dream_buttons(cq: types.CallbackQuery, bot: Bot):
     uid = cq.from_user.id
     if uid not in AUTHORIZED_USER_IDS:
         await cq.answer(); return
 
     code = cq.data
     if code == "dream_write":
-        _waiting[uid] = None          # ждём текст
+        await start_record(bot, uid)
         await cq.message.edit_text("Жду текст сна…")
         await cq.answer()
         return
@@ -142,17 +176,34 @@ async def dream_buttons(cq: types.CallbackQuery):
     }
     label = label_map.get(code, code)
     save_json(uid, "dreams", "dream", {"dream": label, "analysis": "(нет)"})
-    _waiting.pop(uid, None)
+    _active.pop(uid, None)
     await cq.message.edit_text(f"📑 Записал: {label}")
     from handlers.manage import main_kb
     await cq.message.answer("Меню:", reply_markup=main_kb())
     await cq.answer()
 
 
-# ───── перехватываем первое сообщение, когда ждём сон ─────
-@router.message(lambda m: m.from_user.id in _waiting)
-async def catch_dream(msg: types.Message):
-    uid = msg.from_user.id
-    date_iso = _waiting.pop(uid)
-    analysis, metrics = await _commit(uid, msg.text, date_iso)
-    await msg.reply(f"🌓 Анализ сна:\n{analysis}{_fmt_metrics(metrics)}")
+# ───── фиксация сообщений во время записи сна ──────────────
+@router.message(lambda m: m.from_user.id in _active)
+async def collect_dream(msg: types.Message):
+    info = _active.get(msg.from_user.id)
+    if not info:
+        return
+    info["msgs"].append(msg.text)
+    if info["task"]:
+        info["task"].cancel()
+    try:
+        await msg.bot.delete_message(msg.chat.id, info["btn"])
+    except Exception:
+        pass
+    kb = InlineKeyboardBuilder()
+    kb.button(text="🏁 Закончить запись", callback_data="dream_end")
+    new = await msg.answer("Записываю сон…", reply_markup=kb.as_markup())
+    info["btn"] = new.message_id
+    info["task"] = asyncio.create_task(_timeout(msg.from_user.id, msg.bot))
+
+
+@router.callback_query(lambda c: c.data == "dream_end")
+async def end_dream(cq: types.CallbackQuery, bot: Bot):
+    await _finish(cq.from_user.id, bot)
+    await cq.answer()
