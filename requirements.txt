@@ -1,0 +1,8 @@
+aiogram==3.5.0
+apscheduler==3.10.4
+pandas
+numpy
+matplotlib
+scipy
+openai
+python-dotenv
