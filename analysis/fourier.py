@@ -1,17 +1,20 @@
-import json,datetime,numpy as np, matplotlib.pyplot as plt
-from utils.storage import user_dir
-def _series(uid,param):
-    folder=user_dir(uid)/'mood'; pts=[]
-    if not folder.exists(): return None
-    for fp in folder.glob('mood_*.jsonl'):
-        date=datetime.datetime.strptime(fp.name.split('_')[1],'%Y%m%d').date()
-        with fp.open() as f:
-            for line in f:
-                d=json.loads(line)
-                if param in d and d[param] is not None:
-                    pts.append((date.toordinal(), d[param]))
-    if not pts: return None
-    pts.sort(); return np.array(pts).T
+import datetime
+import numpy as np
+import matplotlib.pyplot as plt
+
+from analysis.generate_plot import _load
+
+
+def _series(uid: int, param: str):
+    df = _load(uid)
+    if df.empty or param not in df.columns:
+        return None
+    df = df.dropna(subset=[param]).sort_values("date")
+    if df.empty:
+        return None
+    x = df["date"].dt.date.map(datetime.date.toordinal).to_numpy()
+    y = df[param].to_numpy()
+    return np.array([x, y])
 def save_fft(uid,param,out):
     import numpy as np
     res=_series(uid,param); 

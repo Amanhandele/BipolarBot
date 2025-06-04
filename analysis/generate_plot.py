@@ -5,24 +5,40 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from typing import Optional
 
-
 from utils.storage import user_dir
+from utils.crypto import decrypt
+from handlers.auth import get_pass
 
 
 def _load(uid: int) -> pd.DataFrame:
+    """Return DataFrame with decrypted mood records."""
     folder = user_dir(uid) / "mood"
-    rows = []
+    rows: list[dict] = []
     if not folder.exists():
         return pd.DataFrame()
-    for fp in folder.glob("mood_*.jsonl"):
+
+    pwd = get_pass(uid)
+    for fp in sorted(folder.glob("mood_*.jsonl")):
         date = datetime.datetime.strptime(fp.name.split("_")[1], "%Y%m%d").date()
-        with fp.open() as f:
-            for line in f:
-                d = json.loads(line)
-                d["date"] = date
+        with fp.open("rb") as f:
+            for raw in f:
+                try:
+                    line = raw.decode("utf-8")
+                except UnicodeDecodeError:
+                    continue
+                try:
+                    d = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if "enc" in d:
+                    if not pwd:
+                        continue
+                    d = decrypt(d["enc"], pwd) or {}
+                d.setdefault("date", date)
                 rows.append(d)
+
     df = pd.DataFrame(rows)
-    if not df.empty:
+    if not df.empty and "date" in df.columns:
         df["date"] = pd.to_datetime(df["date"])
     return df
 
