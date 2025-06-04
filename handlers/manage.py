@@ -17,6 +17,7 @@ from handlers import view_dreams   # 📚 кнопка сны
 from handlers import missed
 from handlers import auth
 from dataclasses import dataclass, field
+from aiogram.exceptions import TelegramBadRequest
 
 from typing import Optional
 
@@ -32,7 +33,19 @@ class GraphState:
 
 _graph_state: dict[int, GraphState] = {}
 
+
 router = Router()
+
+
+async def _edit(message: types.Message, text: str, markup: types.InlineKeyboardMarkup):
+    """Edit message text or caption depending on content type."""
+    try:
+        await message.edit_text(text, reply_markup=markup)
+    except TelegramBadRequest as e:
+        if "no text" in str(e).lower():
+            await message.edit_caption(text, reply_markup=markup)
+        elif "message is not modified" not in str(e).lower():
+            raise
 
 # ───── главное меню ───────────────────────────────────────
 # ───────── главное меню ───────────────────────────────────
@@ -201,7 +214,7 @@ async def g_new_param(cq: types.CallbackQuery):
         kb.button(text=l, callback_data=f"gp_add_{k}")
     kb.button(text="⬅️", callback_data="mg_graph")
     kb.adjust(2)
-    await cq.message.edit_text("Параметр:", reply_markup=kb.as_markup())
+    await _edit(cq.message, "Параметр:", kb.as_markup())
     if st:
         st.params = []
     await cq.answer()
@@ -221,7 +234,7 @@ async def g_more_param(cq: types.CallbackQuery):
         kb.button(text="Добавить все", callback_data="ga_all")
     kb.button(text="⬅️", callback_data="g_cancel")
     kb.adjust(2)
-    await cq.message.edit_text("Дополнительный параметр:", reply_markup=kb.as_markup())
+    await _edit(cq.message, "Дополнительный параметр:", kb.as_markup())
     await cq.answer()
 
 
