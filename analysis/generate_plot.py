@@ -3,6 +3,7 @@ from dateutil.relativedelta import relativedelta
 import pandas as pd
 import matplotlib.pyplot as plt
 from typing import Optional
+from math import ceil
 
 from utils.storage import load_records
 
@@ -79,13 +80,29 @@ def plot_multi(uid: int, params: list[str], period: str, out: str, page: int = 0
     df = _slice(df, period, page)
     if df.empty:
         return None
-    grp = df.groupby("date")[params].mean()
-    if grp.empty:
+
+    df = df.dropna(subset=params).sort_values("date")
+    df.set_index("date", inplace=True)
+
+    daily_mean = df[params].resample("1D").mean()
+    if daily_mean.empty:
         return None
+
+    step = 1
+    if len(daily_mean) > 60:
+        span = (daily_mean.index[-1] - daily_mean.index[0]).days + 1
+        step = max(1, ceil(span / 60))
+
+    mean = df[params].resample(f"{step}D").mean()
+    std = df[params].resample(f"{step}D").std().fillna(0)
+
     plt.figure()
     for p in params:
-        if p in grp.columns:
-            plt.plot(grp.index, grp[p], "-o", label=p)
+        if p in mean.columns:
+            if step > 1:
+                plt.errorbar(mean.index, mean[p], yerr=std[p], fmt="-o", label=p)
+            else:
+                plt.plot(mean.index, mean[p], "-o", label=p)
 
     # ───── оформление оси X ────────────────────────────────
     months_nom = [
@@ -97,7 +114,7 @@ def plot_multi(uid: int, params: list[str], period: str, out: str, page: int = 0
         "июля", "августа", "сентября", "октября", "ноября", "декабря",
     ]
 
-    dates = grp.index.to_pydatetime()
+    dates = mean.index.to_pydatetime()
     labels = []
     ticks = []
 
