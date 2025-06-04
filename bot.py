@@ -28,10 +28,26 @@ async def morning(uid:int):
 async def evening(uid:int):
     await bot.send_message(uid,"Вечерний чек‑ин.")
     await mood.start(bot, uid)
-async def plan(uid:int):
-    m,e=load_user_times(uid)
-    sched.add_job(lambda: asyncio.create_task(morning(uid)),'cron',hour=m.hour,minute=m.minute,id=f"m_{uid}",replace_existing=True)
-    sched.add_job(lambda: asyncio.create_task(evening(uid)),'cron',hour=e.hour,minute=e.minute,id=f"e_{uid}",replace_existing=True)
+async def plan(uid: int):
+    m, e = load_user_times(uid)
+    sched.add_job(
+        morning,
+        "cron",
+        args=[uid],
+        hour=m.hour,
+        minute=m.minute,
+        id=f"m_{uid}",
+        replace_existing=True,
+    )
+    sched.add_job(
+        evening,
+        "cron",
+        args=[uid],
+        hour=e.hour,
+        minute=e.minute,
+        id=f"e_{uid}",
+        replace_existing=True,
+    )
 @dp.message(Command("menu"))
 async def cmd_menu(msg: Message):
     if msg.from_user.id not in AUTHORIZED_USER_IDS:return

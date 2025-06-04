@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from pathlib import Path
-from typing import Dict
+from typing import Dict, Optional
 
 from aiogram import Router, Bot, types
 from aiogram.filters import Command
@@ -28,7 +29,7 @@ def build_kb(param: str) -> types.InlineKeyboardMarkup:
     return kb.as_markup()
 
 
-async def start(bot: Bot, uid: int, backdate: str | None = None) -> None:
+async def start(bot: Bot, uid: int, backdate: Optional[str] = None) -> None:
     _state[uid] = {"index": 0, "data": {"date": backdate}, "file": None}
     k, label = PARAMETERS[0]
     await bot.send_message(uid, f"{label}  (-3…3):", reply_markup=build_kb(k))
@@ -81,7 +82,8 @@ async def _save_final(uid: int):
         st["file"] = fp
     else:
         Path(st["file"]).write_text(
-            f"{st['data']}\n", encoding="utf-8"
+            json.dumps(st["data"], ensure_ascii=False) + "\n",
+            encoding="utf-8",
         )  # простая перезапись JSONL одной строкой
 
 

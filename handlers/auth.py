@@ -2,7 +2,7 @@
 # ───────────────────────────────────────────────────────────
 from __future__ import annotations
 import asyncio
-from typing import Dict, Set
+from typing import Dict, Set, Optional
 
 from aiogram import Router, Bot, types
 from aiogram.filters import Command
@@ -82,5 +82,5 @@ async def cmd_log(msg: types.Message):
 
 
 # ───────────────────────────────────────────────────────────
-def get_pass(uid: int) -> str | None:
+def get_pass(uid: int) -> Optional[str]:
     return _cache.get(uid)
