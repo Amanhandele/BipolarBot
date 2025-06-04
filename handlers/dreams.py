@@ -1,6 +1,7 @@
 # handlers/dreams.py
 # ───────────────────────────────────────────────────────────
 import asyncio, datetime, openai
+from typing import Optional
 from aiogram import Router, types
 from aiogram.filters import Command
 from aiogram.utils.keyboard import InlineKeyboardBuilder
@@ -46,11 +47,11 @@ async def analyze(text: str) -> str:
         return f"(ошибка OpenAI: {e})"
 
 
-async def _commit(uid: int, dream_txt: str, date_iso: str ):
+async def _commit(uid: int, dream_txt: str, date_iso: Optional[str] = None):
     analysis = await analyze(dream_txt)
-    payload = {"dream": dream_txt, "analysis": analysis}
-    if date_iso:
-        payload["date"] = date_iso
+    if not date_iso:
+        date_iso = datetime.date.today().isoformat()
+    payload = {"dream": dream_txt, "analysis": analysis, "date": date_iso}
     save_jsonl(uid, "dreams", "dream", payload)
     return analysis
 

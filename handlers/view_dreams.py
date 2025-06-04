@@ -22,7 +22,10 @@ def dates_with_dreams(uid: int) -> List[datetime.date]:
     out = []
     for r in recs:
         if r.get("dream") and not r["dream"].startswith("Не запомнил"):
-            d = datetime.date.fromisoformat(r.get("date"))
+            date_str = r.get("date")
+            if not date_str:
+                continue
+            d = datetime.date.fromisoformat(date_str)
             out.append(d)
     return sorted(set(out))
 
