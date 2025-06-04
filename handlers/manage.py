@@ -9,6 +9,7 @@ from utils.env import AUTHORIZED_USER_IDS
 from config import PARAMETERS, load_user_times, save_user_times
 from analysis.generate_plot import plot_multi
 from analysis.fourier import save_fft
+from utils.storage import user_dir
 from analysis.export import export
 from handlers import mood
 from handlers import view_dreams   # 📚 кнопка сны
@@ -153,8 +154,8 @@ async def g_choose_param(cq: types.CallbackQuery):
 
 
 async def _show_graph(bot: Bot, uid: int, st: GraphState, message: types.Message):
-    path = f"/tmp/{uid}_graph.png"
-    res = plot_multi(uid, st.params, st.period, path, st.page)
+    path = user_dir(uid) / "plot.png"
+    res = plot_multi(uid, st.params, st.period, str(path), st.page)
     kb = InlineKeyboardBuilder()
     if st.period != "all":
         kb.button(text="⬅️", callback_data="gprev")
@@ -275,8 +276,8 @@ async def fft_param(cq: types.CallbackQuery):
 @router.callback_query(lambda c: re.match(r"f_\\w+", c.data))
 async def send_fft(cq: types.CallbackQuery, bot: Bot):
     param = cq.data[2:]
-    path = f"/tmp/{param}_fft.png"
-    res = save_fft(cq.from_user.id, param, path)
+    path = user_dir(cq.from_user.id) / f"{param}_fft.png"
+    res = save_fft(cq.from_user.id, param, str(path))
     if res:
         await bot.send_photo(cq.from_user.id, photo=open(res, "rb"))
     else:
