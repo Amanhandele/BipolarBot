@@ -3,10 +3,10 @@ import datetime
 import sys
 
 from config import PARAMETERS, CIM_EMOTIONS, EMOTION_COEFF
-from utils.storage import save_json
+from utils.storage import save_json, save_json_named
 
 
-def gen(uid: int, days: int = 547) -> None:
+def gen(uid: int, days: int = 547, use_date_name: bool = False) -> None:
     start = datetime.date.today() - datetime.timedelta(days=days)
     for i in range(days):
         day = start + datetime.timedelta(days=i)
@@ -16,7 +16,11 @@ def gen(uid: int, days: int = 547) -> None:
                 record[key] = None
             else:
                 record[key] = random.randint(-3, 3)
-        save_json(uid, "mood", "mood", record)
+        if use_date_name:
+            fname = f"mood_{day.strftime('%Y%m%d')}.json"
+            save_json_named(uid, "mood", fname, record)
+        else:
+            save_json(uid, "mood", "mood", record)
 
         emotions = random.sample(CIM_EMOTIONS, k=random.randint(1, 3))
         intensity = round(random.uniform(0.5, 3.0), 2)
@@ -27,7 +31,11 @@ def gen(uid: int, days: int = 547) -> None:
             metrics["cim_score"] = cim_score
 
         dream = {"dream": "", "analysis": "", "metrics": metrics, "date": day.isoformat()}
-        save_json(uid, "dreams", "dream", dream)
+        if use_date_name:
+            fname_d = f"dream_{day.strftime('%Y%m%d')}.json"
+            save_json_named(uid, "dreams", fname_d, dream)
+        else:
+            save_json(uid, "dreams", "dream", dream)
 
 
 if __name__ == "__main__":
