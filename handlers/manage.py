@@ -2,6 +2,7 @@
 # ───────────────────────────────────────────────────────────
 import re, datetime
 from aiogram import Router, types, Bot
+from aiogram.types import FSInputFile
 from aiogram.filters import Command
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from handlers import view_dreams
@@ -171,7 +172,7 @@ async def _show_graph(bot: Bot, uid: int, st: GraphState, message: types.Message
         except Exception:
             pass
     if res:
-        msg = await bot.send_photo(uid, open(res, "rb"), reply_markup=kb.as_markup())
+        msg = await bot.send_photo(uid, FSInputFile(res), reply_markup=kb.as_markup())
     else:
         msg = await bot.send_message(uid, "Нет данных.", reply_markup=kb.as_markup())
     st.msg_id = msg.message_id
@@ -279,7 +280,7 @@ async def send_fft(cq: types.CallbackQuery, bot: Bot):
     path = user_dir(cq.from_user.id) / f"{param}_fft.png"
     res = save_fft(cq.from_user.id, param, str(path))
     if res:
-        await bot.send_photo(cq.from_user.id, photo=open(res, "rb"))
+        await bot.send_photo(cq.from_user.id, photo=FSInputFile(res))
     else:
         await bot.send_message(cq.from_user.id, "Нет данных.")
     await cq.answer()
