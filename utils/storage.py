@@ -60,7 +60,8 @@ def load_records(uid: int, sub: str) -> List[Dict[str, Any]]:
     pwd = get_pass(uid)
     out: List[Dict[str, Any]] = []
 
-    for fp in sorted(folder.glob(f"{sub[:-1]}_*")):
+    prefix = sub[:-1] if sub.endswith("s") else sub
+    for fp in sorted(folder.glob(f"{prefix}_*")):
         with fp.open("rb") as f:                 # ← бинарный режим
             for raw in f:
                 try:
