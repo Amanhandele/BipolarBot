@@ -5,41 +5,59 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from typing import Optional
 
-from utils.storage import user_dir
+from utils.storage import user_dir, load_records
 from utils.crypto import decrypt
 from handlers.auth import get_pass
 
 
 def _load(uid: int) -> pd.DataFrame:
-    """Return DataFrame with decrypted mood records."""
+    """Return DataFrame with mood records and dream metrics."""
     folder = user_dir(uid) / "mood"
     rows: list[dict] = []
-    if not folder.exists():
-        return pd.DataFrame()
-
-    pwd = get_pass(uid)
-    for fp in sorted(folder.glob("mood_*.jsonl")):
-        date = datetime.datetime.strptime(fp.name.split("_")[1], "%Y%m%d").date()
-        with fp.open("rb") as f:
-            for raw in f:
-                try:
-                    line = raw.decode("utf-8")
-                except UnicodeDecodeError:
-                    continue
-                try:
-                    d = json.loads(line)
-                except json.JSONDecodeError:
-                    continue
-                if "enc" in d:
-                    if not pwd:
+    if folder.exists():
+        pwd = get_pass(uid)
+        for fp in sorted(folder.glob("mood_*.jsonl")):
+            date = datetime.datetime.strptime(fp.name.split("_")[1], "%Y%m%d").date()
+            with fp.open("rb") as f:
+                for raw in f:
+                    try:
+                        line = raw.decode("utf-8")
+                    except UnicodeDecodeError:
                         continue
-                    d = decrypt(d["enc"], pwd) or {}
-                d.setdefault("date", date)
-                rows.append(d)
-
+                    try:
+                        d = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+                    if "enc" in d:
+                        if not pwd:
+                            continue
+                        d = decrypt(d["enc"], pwd) or {}
+                    d.setdefault("date", date)
+                    rows.append(d)
     df = pd.DataFrame(rows)
+
+    # добавляем показатели снов
+    dream_rows = []
+    for rec in load_records(uid, "dreams"):
+        date = rec.get("date")
+        metrics = rec.get("metrics") or {}
+        if not date or not metrics:
+            continue
+        row = {"date": pd.to_datetime(date)}
+        if "cim_score" in metrics:
+            row["cim_score"] = metrics["cim_score"]
+        if "intensity" in metrics:
+            row["intensity"] = metrics["intensity"]
+        if "emotions" in metrics:
+            for emo in metrics["emotions"]:
+                row.setdefault(f"emo_{emo}", metrics.get("intensity", 1))
+        dream_rows.append(row)
+
+    df_dream = pd.DataFrame(dream_rows)
     if not df.empty and "date" in df.columns:
         df["date"] = pd.to_datetime(df["date"])
+    if not df_dream.empty:
+        df = pd.concat([df, df_dream], ignore_index=True, sort=False)
     return df
 
 
