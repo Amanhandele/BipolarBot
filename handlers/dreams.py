@@ -6,11 +6,11 @@ from aiogram import Router, types
 from aiogram.filters import Command
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
-from Token import AUTHORIZED_USER_IDS, OPENAI_API_KEY
+from Token import AUTHORIZED_USER_IDS
 from utils.storage import save_jsonl
 
 router = Router()
-openai.api_key = OPENAI_API_KEY
+
 
 # user_id → date (None = сегодня)
 _waiting: dict[int, str] = {}
@@ -29,17 +29,18 @@ def dream_kb() -> types.InlineKeyboardMarkup:
 
 # ───── GPT-анализ ──────────────────────────────────────────
 async def analyze(text: str) -> str:
-    if not OPENAI_API_KEY:
-        return "(ключ OpenAI не указан)"
     try:
-        raise Exception("Фича с анализом снов через чатгпт пока не работает.")
+        from Token import OPENAI_API_KEY
+        openai.api_key = OPENAI_API_KEY
+        if not OPENAI_API_KEY:
+            raise Exception("Фича с анализом снов через чатгпт пока не работает.")
         resp = await openai.ChatCompletion.acreate(
             model="gpt-4o",
             messages=[
-                {"role": "system", "content": "Ты юнгианский аналитик. Кратко анализируй сон."},
+                {"role": "system", "content": "Проанализируй нижеследующий сон по Юнгу."},
                 {"role": "user",   "content": text}
             ],
-            max_tokens=350,
+            max_tokens=3500,
             temperature=0.7,
         )
         return resp.choices[0].message.content.strip()
