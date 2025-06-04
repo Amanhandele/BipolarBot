@@ -1,7 +1,7 @@
 import asyncio, logging
 from aiogram import Bot, Dispatcher
 from aiogram.filters import Command
-from aiogram.types import Message
+from aiogram.types import Message, BotCommand
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from Token import API_TOKEN, AUTHORIZED_USER_IDS
 from config import load_user_times, save_user_times
@@ -22,6 +22,21 @@ dp.include_router(view_dreams.router)
 
 
 sched=AsyncIOScheduler()
+
+
+async def setup_commands():
+    cmds = [
+        BotCommand("start", "Старт"),
+        BotCommand("menu", "Меню"),
+        BotCommand("checkin", "Быстрый чек-ин"),
+        BotCommand("dream", "Записать сон"),
+        BotCommand("dreams", "Список снов"),
+        BotCommand("set", "Время уведомлений"),
+        BotCommand("login", "Ввести пароль"),
+        BotCommand("register", "Новый пароль"),
+    ]
+    await bot.set_my_commands(cmds)
+
 async def morning(uid:int):
     from handlers.dreams import dream_kb
     await bot.send_message(uid,"Доброе утро! /dream или кнопка:", reply_markup=dream_kb())
@@ -48,9 +63,18 @@ async def plan(uid: int):
         id=f"e_{uid}",
         replace_existing=True,
     )
+@dp.message(Command("start"))
+async def cmd_start(msg: Message):
+    if msg.from_user.id not in AUTHORIZED_USER_IDS:
+        return
+    from handlers.manage import main_kb
+    await msg.answer("Меню:", reply_markup=main_kb())
+
+
 @dp.message(Command("menu"))
 async def cmd_menu(msg: Message):
-    if msg.from_user.id not in AUTHORIZED_USER_IDS:return
+    if msg.from_user.id not in AUTHORIZED_USER_IDS:
+        return
     from handlers.manage import main_kb
     await msg.answer("Меню:", reply_markup=main_kb())
 @dp.message(Command("set"))
@@ -62,8 +86,10 @@ async def cmd_set(msg: Message):
     save_user_times(msg.from_user.id, parts[1], parts[2])
     await plan(msg.from_user.id)
     await msg.reply("Установлено")
+
 async def main():
     for uid in AUTHORIZED_USER_IDS: await plan(uid)
+    await setup_commands()
     sched.start()
     await dp.start_polling(bot)
 if __name__=='__main__':
