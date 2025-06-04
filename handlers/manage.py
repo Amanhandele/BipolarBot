@@ -7,7 +7,7 @@ from aiogram.filters import Command
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from handlers import view_dreams
 from utils.env import AUTHORIZED_USER_IDS
-from config import PARAMETERS, GRAPH_PARAMS, CIM_EMOTIONS, load_user_times, save_user_times
+from config import CIM_EMOTIONS, load_user_times, save_user_times, user_graph_params, add_custom_param
 from analysis.generate_plot import plot_multi
 from analysis.fourier import save_fft
 from utils.storage import user_dir
@@ -33,6 +33,7 @@ class GraphState:
 
 _graph_state: dict[int, GraphState] = {}
 _cim_state: dict[int, GraphState] = {}
+_wait_param: set[int] = set()
 
 
 router = Router()
@@ -54,14 +55,22 @@ def main_kb() -> types.InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
     kb.button(text="📈 График",        callback_data="mg_graph")
     kb.button(text="🔍 FFT",           callback_data="mg_fft")
-    kb.button(text="📚 Сны",           callback_data="mg_dreams")
+    kb.button(text="📚 Архив снов",    callback_data="mg_dreams")
     kb.button(text="🎭 CIM-анализ",   callback_data="mg_cim")
     kb.button(text="🗓 Пропуски",      callback_data="mg_missed")
-    kb.button(text="🕒 Напоминания",   callback_data="mg_time")
     kb.button(text="📝 Чек-ин",        callback_data="mg_now")
     kb.button(text="🌙 Записать сон",  callback_data="mg_dream_now")
-    kb.button(text="🔑 Пароль",        callback_data="mg_pass")      # ← новая
-    kb.button(text="📦 Экспорт",       callback_data="mg_export")
+    kb.button(text="⚙️ Настройки",    callback_data="mg_settings")
+    kb.adjust(1)
+    return kb.as_markup()
+
+def settings_kb() -> types.InlineKeyboardMarkup:
+    kb = InlineKeyboardBuilder()
+    kb.button(text="🕒 Напоминания", callback_data="mg_time")
+    kb.button(text="🔑 Пароль",      callback_data="mg_pass")
+    kb.button(text="📦 Экспорт",     callback_data="mg_export")
+    kb.button(text="➕ Параметр",     callback_data="mg_add_param")
+    kb.button(text="⬅️",             callback_data="mg_back")
     kb.adjust(1)
     return kb.as_markup()
 
@@ -70,6 +79,12 @@ def main_kb() -> types.InlineKeyboardMarkup:
 async def menu(msg: types.Message):
     if msg.from_user.id in AUTHORIZED_USER_IDS:
         await msg.answer("Меню:", reply_markup=main_kb())
+
+
+@router.callback_query(lambda c: c.data == "mg_settings")
+async def open_settings(cq: types.CallbackQuery):
+    await cq.message.edit_text("Настройки:", reply_markup=settings_kb())
+    await cq.answer()
 
 
 # ───── пароль подменю ─────────────────────────────────────
@@ -169,8 +184,9 @@ async def g_choose_param(cq: types.CallbackQuery):
     st.page = 0
     st.params = []
     st.msg_id = None
+    g_params = user_graph_params(cq.from_user.id)
     kb = InlineKeyboardBuilder()
-    for k, l in GRAPH_PARAMS:
+    for k, l in g_params:
         kb.button(text=l, callback_data=f"gp_add_{k}")
     kb.button(text="⬅️", callback_data="mg_graph")
     kb.adjust(2)
@@ -187,7 +203,7 @@ async def _show_graph(bot: Bot, uid: int, st: GraphState, message: types.Message
         kb.button(text="➡️", callback_data="gnext")
     kb.adjust(2)
     kb.button(text="Выбрать другой параметр", callback_data="g_new")
-    if len(st.params) < len(GRAPH_PARAMS):
+    if len(st.params) < len(user_graph_params(uid)):
         kb.button(text="Выбрать дополнительный параметр", callback_data="g_more")
     kb.adjust(1)
     kb.button(text="⬅️ Меню", callback_data="mg_back")
@@ -222,7 +238,7 @@ async def g_new_param(cq: types.CallbackQuery):
             pass
         st.msg_id = None
     kb = InlineKeyboardBuilder()
-    for k, l in GRAPH_PARAMS:
+    for k, l in user_graph_params(cq.from_user.id):
         kb.button(text=l, callback_data=f"gp_add_{k}")
     kb.button(text="⬅️", callback_data="mg_graph")
     kb.adjust(2)
@@ -238,8 +254,8 @@ async def g_more_param(cq: types.CallbackQuery):
     if not st:
         await cq.answer(); return
     kb = InlineKeyboardBuilder()
-    remaining = [k for k, _ in GRAPH_PARAMS if k not in st.params]
-    for k, l in GRAPH_PARAMS:
+    remaining = [k for k, _ in user_graph_params(cq.from_user.id) if k not in st.params]
+    for k, l in user_graph_params(cq.from_user.id):
         if k in remaining:
             kb.button(text=l, callback_data=f"ga_{k}")
     if remaining:
@@ -265,7 +281,7 @@ async def g_add_param(cq: types.CallbackQuery, bot: Bot):
     if not st:
         await cq.answer(); return
     if cq.data == "ga_all":
-        st.params = [k for k, _ in GRAPH_PARAMS]
+        st.params = [k for k, _ in user_graph_params(cq.from_user.id)]
     else:
         param = cq.data.split("_", 1)[1]
         if param not in st.params:
@@ -435,7 +451,7 @@ async def cim_nav(cq: types.CallbackQuery, bot: Bot):
 @router.callback_query(lambda c: c.data == "mg_fft")
 async def fft_param(cq: types.CallbackQuery):
     kb = InlineKeyboardBuilder()
-    for k, l in GRAPH_PARAMS:
+    for k, l in user_graph_params(cq.from_user.id):
         kb.button(text=l, callback_data=f"f_{k}")
     kb.button(text="⬅️", callback_data="mg_back")
     kb.adjust(2)
@@ -464,7 +480,7 @@ async def time_view(cq: types.CallbackQuery):
     await cq.message.edit_text(
         f"Утро  {m.strftime('%H:%M')}\nВечер {e.strftime('%H:%M')}\n"
         f"Измени:  /set HH:MM HH:MM",
-        reply_markup=main_kb()
+        reply_markup=settings_kb()
     )
     await cq.answer()
 
@@ -475,6 +491,21 @@ async def exp(cq: types.CallbackQuery, bot: Bot):
     path = export(cq.from_user.id)
     await bot.send_document(cq.from_user.id, open(path, "rb"), caption="Экспорт")
     await cq.answer()
+
+
+@router.callback_query(lambda c: c.data == "mg_add_param")
+async def add_param_prompt(cq: types.CallbackQuery):
+    await cq.message.answer("Название нового параметра:", reply_markup=types.ForceReply())
+    _wait_param.add(cq.from_user.id)
+    await cq.answer()
+
+
+@router.message(lambda m: m.from_user.id in _wait_param)
+async def receive_param(msg: types.Message):
+    _wait_param.discard(msg.from_user.id)
+    label = msg.text.strip()
+    add_custom_param(msg.from_user.id, label)
+    await msg.reply(f"Добавлен параметр: {label}")
 
 
 # ───── кнопка Пропуски ────────────────────────────────────

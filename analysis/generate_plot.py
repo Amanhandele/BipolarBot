@@ -88,21 +88,28 @@ def plot_multi(uid: int, params: list[str], period: str, out: str, page: int = 0
     if daily_mean.empty:
         return None
 
-    step = 1
-    if len(daily_mean) > 60:
-        span = (daily_mean.index[-1] - daily_mean.index[0]).days + 1
-        step = max(1, ceil(span / 60))
-
-    mean = daily_mean.resample(f"{step}D").mean()
-    std = daily_mean.resample(f"{step}D").std().fillna(0)
+    if len(params) > 1:
+        mean = daily_mean.rolling(window=7, min_periods=1).mean()
+        step = 1
+        std = None
+    else:
+        step = 1
+        if len(daily_mean) > 60:
+            span = (daily_mean.index[-1] - daily_mean.index[0]).days + 1
+            step = max(1, ceil(span / 60))
+        mean = daily_mean.resample(f"{step}D").mean()
+        std = daily_mean.resample(f"{step}D").std().fillna(0)
 
     plt.figure()
     for p in params:
         if p in mean.columns:
-            if step > 1:
-                plt.errorbar(mean.index, mean[p], yerr=std[p], fmt="-o", label=p)
+            if len(params) > 1:
+                plt.plot(mean.index, mean[p], label=p)
             else:
-                plt.plot(mean.index, mean[p], "-o", label=p)
+                if step > 1:
+                    plt.errorbar(mean.index, mean[p], yerr=std[p], fmt="-o", label=p)
+                else:
+                    plt.plot(mean.index, mean[p], "-o", label=p)
 
     # ───── оформление оси X ────────────────────────────────
     months_nom = [
