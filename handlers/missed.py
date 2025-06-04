@@ -44,10 +44,5 @@ async def start_back_ci(cq: types.CallbackQuery, bot: Bot):
 @router.callback_query(lambda c: c.data.startswith('dr_'))
 async def start_back_dream(cq: types.CallbackQuery, bot: Bot):
     date=cq.data.split('_',1)[1]
-
-    await bot.send_message(
-        cq.from_user.id,
-        f"Сон за {date}\nОтправь текст сообщением или кнопка:",
-        reply_markup=dreams.dream_kb()
-    )
-    dreams._waiting[cq.from_user.id] = date  # ← ставим флажок
+    await bot.send_message(cq.from_user.id, f"Сон за {date}")
+    await dreams.start_record(bot, cq.from_user.id, date)

@@ -59,6 +59,7 @@ def main_kb() -> types.InlineKeyboardMarkup:
     kb.button(text="🗓 Пропуски",      callback_data="mg_missed")
     kb.button(text="🕒 Напоминания",   callback_data="mg_time")
     kb.button(text="📝 Чек-ин",        callback_data="mg_now")
+    kb.button(text="🌙 Записать сон",  callback_data="mg_dream_now")
     kb.button(text="🔑 Пароль",        callback_data="mg_pass")      # ← новая
     kb.button(text="📦 Экспорт",       callback_data="mg_export")
     kb.adjust(1)
@@ -112,6 +113,14 @@ async def dreams_button(cq: types.CallbackQuery, bot: Bot):
 async def now_ci(cq: types.CallbackQuery, bot: Bot):
     await bot.send_message(cq.from_user.id, "Быстрый чек-ин.")
     await mood.start(bot, cq.from_user.id)
+    await cq.answer()
+
+
+# ───── кнопка Запись сна сейчас ───────────────────────────
+@router.callback_query(lambda c: c.data == "mg_dream_now")
+async def dream_now(cq: types.CallbackQuery, bot: Bot):
+    from handlers import dreams
+    await dreams.start_record(bot, cq.from_user.id)
     await cq.answer()
 
 
@@ -217,7 +226,7 @@ async def g_new_param(cq: types.CallbackQuery):
         kb.button(text=l, callback_data=f"gp_add_{k}")
     kb.button(text="⬅️", callback_data="mg_graph")
     kb.adjust(2)
-    await _edit(cq.message, "Параметр:", kb.as_markup())
+    await cq.bot.send_message(cq.from_user.id, "Параметр:", reply_markup=kb.as_markup())
     if st:
         st.params = []
     await cq.answer()
@@ -476,5 +485,9 @@ async def exp(cq: types.CallbackQuery, bot: Bot):
 # ───── Назад ──────────────────────────────────────────────
 @router.callback_query(lambda c: c.data == "mg_back")
 async def back(cq: types.CallbackQuery):
-    await _edit(cq.message, "Меню:", main_kb())
+    try:
+        await cq.message.delete()
+    except Exception:
+        pass
+    await cq.message.answer("Меню:", reply_markup=main_kb())
     await cq.answer()
