@@ -5,14 +5,12 @@ from aiogram.types import Message, BotCommand
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from Token import API_TOKEN, AUTHORIZED_USER_IDS
 from config import load_user_times, save_user_times
-from handlers import dreams, mood, manage, missed
+from handlers import dreams, mood, manage, missed, view_dreams
 logging.basicConfig(level=logging.INFO)
 bot=Bot(API_TOKEN, parse_mode='HTML')
 dp=Dispatcher()
-from handlers import auth, dreams, mood, manage, missed, view_dreams
 
 # порядок подключения ВАЖЕН:
-dp.include_router(auth.router)       # ← первым!
 dp.include_router(dreams.router)
 dp.include_router(mood.router)
 dp.include_router(manage.router)
@@ -32,8 +30,6 @@ async def setup_commands():
         BotCommand(command="dream", description="Записать сон"),
         BotCommand(command="dreams", description="Архив снов"),
         BotCommand(command="set", description="Время уведомлений"),
-        BotCommand(command="login", description="Ввести пароль"),
-        BotCommand(command="register", description="Новый пароль"),
     ]
     await bot.set_my_commands(cmds)
 

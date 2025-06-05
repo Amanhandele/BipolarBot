@@ -15,7 +15,6 @@ from analysis.export import export
 from handlers import mood
 from handlers import view_dreams   # 📚 кнопка сны
 from handlers import missed
-from handlers import auth
 from dataclasses import dataclass, field
 from aiogram.exceptions import TelegramBadRequest
 
@@ -67,7 +66,6 @@ def main_kb() -> types.InlineKeyboardMarkup:
 def settings_kb() -> types.InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
     kb.button(text="🕒 Напоминания", callback_data="mg_time")
-    kb.button(text="🔑 Пароль",      callback_data="mg_pass")
     kb.button(text="📦 Экспорт",     callback_data="mg_export")
     kb.button(text="➕ Параметр",     callback_data="mg_add_param")
     kb.button(text="⬅️",             callback_data="mg_back")
@@ -84,31 +82,6 @@ async def menu(msg: types.Message):
 @router.callback_query(lambda c: c.data == "mg_settings")
 async def open_settings(cq: types.CallbackQuery):
     await cq.message.edit_text("Настройки:", reply_markup=settings_kb())
-    await cq.answer()
-
-
-# ───── пароль подменю ─────────────────────────────────────
-@router.callback_query(lambda c: c.data == "mg_pass")
-async def pass_menu(cq: types.CallbackQuery):
-    kb = InlineKeyboardBuilder()
-    kb.button(text="🔐 Установить", callback_data="pass_set")
-    kb.button(text="🔓 Войти",      callback_data="pass_login")
-    kb.button(text="⬅️",            callback_data="mg_back")
-    kb.adjust(1)
-    await cq.message.edit_text("Пароль:", reply_markup=kb.as_markup())
-    await cq.answer()
-
-
-@router.callback_query(lambda c: c.data in ("pass_set", "pass_login"))
-async def pass_actions(cq: types.CallbackQuery, bot: Bot):
-    prompt = "Введите новый пароль:" if cq.data == "pass_set" else "Введите пароль:"
-    await bot.send_message(
-        cq.from_user.id,
-        prompt,
-        reply_markup=types.ForceReply()
-    )
-    target = auth._wait_set if cq.data == "pass_set" else auth._wait_login
-    target.add(cq.from_user.id)
     await cq.answer()
 
 
