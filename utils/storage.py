@@ -1,12 +1,10 @@
 # utils/storage.py
 # ───────────────────────────────────────────────────────────
-import datetime, json, os
+import datetime, json
 from pathlib import Path
 from typing import Any, Dict, List
 
 from config import BASE_DIR
-from utils.crypto import encrypt, decrypt
-from handlers.auth import get_pass
 
 # ───────────────────────────────────────────────────────────
 def user_dir(uid: int) -> Path:
@@ -21,11 +19,8 @@ def save_json(uid: int, sub: str, prefix: str, data: Dict[str, Any]) -> Path:
     folder = user_dir(uid) / sub
     folder.mkdir(exist_ok=True)
 
-    pwd = get_pass(uid)
-    payload = {"enc": encrypt(data, pwd)} if pwd else data
-
     fp = folder / f"{prefix}_{ts}.json"
-    fp.write_text(json.dumps(payload, ensure_ascii=False) + "\n", encoding="utf-8")
+    fp.write_text(json.dumps(data, ensure_ascii=False) + "\n", encoding="utf-8")
     return fp
 
 
@@ -38,26 +33,22 @@ def save_json_named(uid: int, sub: str, name: str, data: Dict[str, Any]) -> Path
     if not name.endswith(".json"):
         name += ".json"
 
-    pwd = get_pass(uid)
-    payload = {"enc": encrypt(data, pwd)} if pwd else data
-
     fp = folder / name
-    fp.write_text(json.dumps(payload, ensure_ascii=False) + "\n", encoding="utf-8")
+    fp.write_text(json.dumps(data, ensure_ascii=False) + "\n", encoding="utf-8")
     return fp
 
 
 # ─────────── чтение всех строк с защитой от «кривых» ───────
 def load_records(uid: int, sub: str) -> List[Dict[str, Any]]:
     """
-    Возвращает список словарей (уже расшифрованных, если пароль в RAM).
-    Строки, которые не декодируются как UTF-8 или не парсятся в JSON,
-    просто пропускаются, чтобы не ронять бота.
+    Возвращает список словарей. Строки, которые не декодируются как UTF-8
+    или не парсятся в JSON, просто пропускаются, чтобы не ронять бота.
+    Старые зашифрованные записи игнорируются.
     """
     folder = user_dir(uid) / sub
     if not folder.exists():
         return []
 
-    pwd = get_pass(uid)
     out: List[Dict[str, Any]] = []
 
     prefix = sub[:-1] if sub.endswith("s") else sub
@@ -74,8 +65,6 @@ def load_records(uid: int, sub: str) -> List[Dict[str, Any]]:
                     continue                     # тоже пропускаем
 
                 if "enc" in j:
-                    if not pwd:
-                        continue                 # нет пароля → пропуск
-                    j = decrypt(j["enc"], pwd) or {}
+                    continue  # старые зашифрованные записи пропускаем
                 out.append(j)
     return out

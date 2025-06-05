@@ -8,8 +8,7 @@ from aiogram.filters import Command
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from utils.storage import load_records
-from utils.crypto import decrypt
-from handlers.auth import get_pass
+
 from Token import AUTHORIZED_USER_IDS
 
 router = Router()
