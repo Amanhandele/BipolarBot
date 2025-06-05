@@ -9,6 +9,7 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from Token import AUTHORIZED_USER_IDS
 from utils.storage import save_json
+from utils import send_long
 
 router = Router()
 
@@ -77,7 +78,8 @@ async def _finish(uid: int, bot: Bot):
     text = "\n".join(info["msgs"]).strip()
     if text:
         analysis, metrics = await _commit(uid, text, info["date"])
-        await bot.send_message(
+        await send_long(
+            bot,
             uid,
             f"🌓 Анализ сна:\n{analysis}{_fmt_metrics(metrics)}",
         )
@@ -169,7 +171,12 @@ async def cmd_dream(msg: types.Message):
     text = msg.text.replace("/dream", "", 1).strip()
     if text:
         analysis, metrics = await _commit(msg.from_user.id, text, None)
-        await msg.reply(f"🌓 Анализ сна:\n{analysis}{_fmt_metrics(metrics)}")
+        await send_long(
+            msg.bot,
+            msg.chat.id,
+            f"🌓 Анализ сна:\n{analysis}{_fmt_metrics(metrics)}",
+            reply_to_message_id=msg.message_id,
+        )
         from handlers.manage import main_kb
         await msg.answer("Меню:", reply_markup=main_kb())
     else:
