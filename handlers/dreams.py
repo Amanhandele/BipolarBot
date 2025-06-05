@@ -164,7 +164,8 @@ async def cmd_dream(msg: types.Message):
         await start_record(msg.bot, msg.from_user.id)
 
 
-@router.callback_query(lambda c: c.data.startswith("dream_"))
+# Обрабатываем кнопки, кроме завершения записи
+@router.callback_query(lambda c: c.data.startswith("dream_") and c.data != "dream_end")
 async def dream_buttons(cq: types.CallbackQuery, bot: Bot):
     uid = cq.from_user.id
     if uid not in AUTHORIZED_USER_IDS:
