@@ -14,15 +14,22 @@ router = Router()
 
 
 def _fmt_metrics(metrics: dict) -> str:
-    """Return short text summary from metrics."""
-    extra = []
-    if metrics.get("cim_score") is not None:
-        extra.append(f"CIM-score: {metrics['cim_score']}")
+    """Return formatted metrics block for Telegram."""
+
+    if not metrics:
+        return ""
+
+    lines = ["<b>Метрики сна</b>"]
+
     if metrics.get("intensity") is not None:
-        extra.append(f"I: {metrics['intensity']}")
-    if metrics.get("emotions"):
-        extra.append("эмоции: " + ", ".join(metrics["emotions"]))
-    return ("\n\n" + "; ".join(extra)) if extra else ""
+        lines.append(f"Интенсивность: {metrics['intensity']}")
+
+    emotions = metrics.get("emotions") or []
+    if emotions:
+        lines.append("Распознанные эмоции:")
+        lines.extend(emotions)
+
+    return "\n\n" + "\n".join(lines)
 
 
 # user_id → {"msgs": list[str], "btn": int, "task": asyncio.Task, "date": str}
@@ -74,10 +81,14 @@ async def _finish(uid: int, bot: Bot):
             uid,
             f"🌓 Анализ сна:\n{analysis}{_fmt_metrics(metrics)}",
         )
+        from handlers.manage import main_kb
+        await bot.send_message(uid, "Меню:", reply_markup=main_kb())
     else:
         payload = {"dream": "", "analysis": "", "metrics": {}, "date": info["date"]}
         save_json(uid, "dreams", "dream", payload)
         await bot.send_message(uid, "Сон сохранён (пусто).")
+        from handlers.manage import main_kb
+        await bot.send_message(uid, "Меню:", reply_markup=main_kb())
 
 
 # ───── GPT-анализ ──────────────────────────────────────────
@@ -128,6 +139,8 @@ async def _commit(uid: int, dream_txt: str, date_iso: Optional[str] = None):
             except Exception:
                 metrics = {}
             analysis = raw[: m.start()].strip()
+        else:
+            analysis = re.sub(r"METRICS:.*", "", raw, flags=re.S).strip()
 
     intensity = metrics.get("intensity")
     emotions = metrics.get("emotions") or []
@@ -159,6 +172,8 @@ async def cmd_dream(msg: types.Message):
     if text:
         analysis, metrics = await _commit(msg.from_user.id, text, None)
         await msg.reply(f"🌓 Анализ сна:\n{analysis}{_fmt_metrics(metrics)}")
+        from handlers.manage import main_kb
+        await msg.answer("Меню:", reply_markup=main_kb())
     else:
         await msg.reply("Отправь текст сна сообщением или выбери кнопку:", reply_markup=dream_kb())
         await start_record(msg.bot, msg.from_user.id)
