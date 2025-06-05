@@ -103,9 +103,9 @@ async def analyze(text: str) -> str:
         emotions = ", ".join(CIM_EMOTIONS)
         prompt = (
             "Сначала подробно проанализируй сон по Юнгу без форматирования Markdown, с форматированием для Telegram."
+            "В конце ответа отдельной строкой напиши 'METRICS: '{\"intensity\": <0.5-3>, \"emotions\":[...]}'."
             "Для расчёта CIM-анализа перечисли эмоции только из списка: "
             f"{emotions}. "
-            "В конце ответа отдельной строкой напиши 'METRICS: '{\"intensity\": <0.5-3>, \"emotions\":[...]}'."
         )
 
         client = AsyncOpenAI(api_key=OPENAI_API_KEY)
