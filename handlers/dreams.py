@@ -130,9 +130,9 @@ async def _commit(uid: int, dream_txt: str, date_iso: Optional[str] = None):
     if dream_txt.strip():
         raw = await analyze(dream_txt)
         analysis = raw
-        m = re.search(r"METRICS:\s*(\{.*\})", raw, re.S)
+        m = re.search(r"METRICS:\s*(['\"])?(\{.*\})(?:\1)?", raw, re.S)
         if m:
-            json_str = m.group(1)
+            json_str = m.group(2)
 
             try:
                 metrics = json.loads(json_str)
