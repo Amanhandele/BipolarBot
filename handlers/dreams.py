@@ -35,7 +35,15 @@ def _fmt_metrics(metrics: dict) -> str:
 
 # user_id → {"msgs": list[str], "btn": int, "task": asyncio.Task, "date": str}
 _active: dict[int, dict] = {}
+_prompt_dates: dict[int, str] = {}
 TIMEOUT = 900  # 15 минут
+
+# ───── учёт времени запроса ─────────────────────────────────
+def register_prompt(uid: int, date_iso: Optional[str] = None) -> None:
+    """Remember when the bot asked to record a dream."""
+    if date_iso is None:
+        date_iso = datetime.date.today().isoformat()
+    _prompt_dates[uid] = date_iso
 
 
 # ───── клавиатура ──────────────────────────────────────────
@@ -57,7 +65,7 @@ async def _timeout(uid: int, bot: Bot):
 
 async def start_record(bot: Bot, uid: int, date_iso: Optional[str] = None):
     if date_iso is None:
-        date_iso = datetime.date.today().isoformat()
+        date_iso = _prompt_dates.pop(uid, datetime.date.today().isoformat())
     kb = InlineKeyboardBuilder()
     kb.button(text="🏁 Закончить запись", callback_data="dream_end")
     msg = await bot.send_message(uid, "Записываю сон…", reply_markup=kb.as_markup())
@@ -205,7 +213,10 @@ async def dream_buttons(cq: types.CallbackQuery, bot: Bot):
     }
     label = label_map.get(code, code)
     info = _active.pop(uid, None)
-    date_iso = info.get("date") if info else datetime.date.today().isoformat()
+    if info:
+        date_iso = info.get("date")
+    else:
+        date_iso = _prompt_dates.pop(uid, datetime.date.today().isoformat())
     payload = {"dream": label, "analysis": "(нет)", "metrics": {}, "date": date_iso}
     save_json(uid, "dreams", "dream", payload)
     await cq.message.edit_text(f"📑 Записал: {label}")
