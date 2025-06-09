@@ -34,7 +34,8 @@ async def setup_commands():
     await bot.set_my_commands(cmds)
 
 async def morning(uid:int):
-    from handlers.dreams import dream_kb
+    from handlers.dreams import dream_kb, register_prompt
+    register_prompt(uid)
     await bot.send_message(uid,"Доброе утро! /dream или кнопка:", reply_markup=dream_kb())
 async def evening(uid:int):
     await bot.send_message(uid,"Вечерний чек‑ин.")

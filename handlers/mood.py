@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import datetime
 from pathlib import Path
 from typing import Dict, Optional
 
@@ -31,8 +32,9 @@ def build_kb(param: str) -> types.InlineKeyboardMarkup:
 
 
 async def start(bot: Bot, uid: int, backdate: Optional[str] = None) -> None:
-    params=user_parameters(uid)
-    _state[uid] = {"index": 0, "data": {"date": backdate}, "file": None, "params":params}
+    params = user_parameters(uid)
+    date_iso = backdate or datetime.date.today().isoformat()
+    _state[uid] = {"index": 0, "data": {"date": date_iso}, "file": None, "params": params}
     k, label = params[0]
     await bot.send_message(uid, f"{label}  (-3…3):", reply_markup=build_kb(k))
 

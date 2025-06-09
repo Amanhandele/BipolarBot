@@ -19,8 +19,15 @@ PAGE = 16  # сколько дат на одной странице
 def dates_with_dreams(uid: int) -> List[datetime.date]:
     recs = load_records(uid, "dreams")
     out = []
+    skip = (
+        "Не запомнил сон",
+        "Лень записывать",
+        "Помню урывками",
+        "",
+    )
     for r in recs:
-        if r.get("dream") and not r["dream"].startswith("Не запомнил"):
+        txt = r.get("dream") or ""
+        if txt and not any(txt.startswith(s) for s in skip):
             date_str = r.get("date")
             if not date_str:
                 continue
@@ -78,13 +85,14 @@ async def change_page(cq: types.CallbackQuery):
 @router.callback_query(lambda c: c.data.startswith("showdream_"))
 async def show_one(cq: types.CallbackQuery, bot: Bot):
     date_iso = cq.data.split("_", 1)[1]
-    recs = load_records(cq.from_user.id, "dreams")
-    rec = next((r for r in recs if r.get("date") == date_iso), None)
-    if not rec:
-        await cq.answer("Запись не найдена"); return
+    recs = [r for r in load_records(cq.from_user.id, "dreams") if r.get("date") == date_iso]
+    if not recs:
+        await cq.answer("Запись не найдена")
+        return
 
-    await bot.send_message(
-        cq.from_user.id,
-        f"🌙 Сон ({date_iso}):\n{rec['dream']}\n\n🌓 {rec['analysis']}"
-    )
+    for rec in recs:
+        await bot.send_message(
+            cq.from_user.id,
+            f"🌙 Сон ({date_iso}):\n{rec['dream']}\n\n🌓 {rec['analysis']}"
+        )
     await cq.answer()
